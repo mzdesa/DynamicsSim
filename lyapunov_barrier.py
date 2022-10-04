@@ -56,7 +56,23 @@ class DoubleIntLyapunov(LyapunovBarrier):
             inputDimn (int): length of input vector
             dynamics (Dynamics): 
         """
+        self._goal_pt = None
         super().__init__(stateDimn, inputDimn, dynamics)
+        
+    def set_goal_pt(self, pt):
+        """
+        Function to update the goal point of the system
+
+        Args:
+            pt (2 x 1 numpy array): new point to be used for a lyapunov function, (x, y) position
+        """
+        self._barrierPt = pt
+    
+    def get_goal_pt(self):
+        """
+        Retreive the lyapunov goal point from the class attribute
+        """
+        return self._barrierPt
     
     def eval(self, x, u, t):
         return super().eval(x, u, t)
@@ -67,7 +83,7 @@ ADD YOUR BARRIER FUNCTIONS HERE
 ********************************
 """
 
-class DoubleIntBarrier(LyapunovBarrier):
+class PointBarrier(LyapunovBarrier):
     def __init__(self, stateDimn, inputDimn, dynamics):
         """
         Double integrator system Lyapunov function.
@@ -76,7 +92,34 @@ class DoubleIntBarrier(LyapunovBarrier):
             inputDimn (int): length of input vector
             dynamics (Dynamics): 
         """
+        self._barrierPt = None
+        self._buffer = 0.1 #barrier buffer
         super().__init__(stateDimn, inputDimn, dynamics)
+        
+    def set_barrier_pt(self, pt):
+        """
+        Function to update the point used in the barrier function
+
+        Args:
+            pt (2 x 1 numpy array): new point to be used for a barrier function, (x, y) position
+        """
+        self._barrierPt = pt
+    
+    def get_barrier_pt(self):
+        """
+        Retreive the barrier point from the class attribute
+        """
+        return self._barrierPt
     
     def eval(self, x, u, t):
-        return super().eval(x, u, t)
+        """
+        Evaluate the Euclidean distance to the barrier point.
+
+        Args:
+            x (stat_dimn x 1 numpy array): current state vector
+            u (_type_): current input vector
+            t (_type_): current time in simulation
+        """
+        #evaluate the barrier function value
+        h = np.linalg.norm(x[0:2].reshape((2, 1)) - self.get_barrier_pt())^2 - self._buffer**2
+        

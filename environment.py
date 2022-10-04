@@ -1,10 +1,7 @@
 #Python Dependencies
 import numpy as np
-import gym
-from gym import spaces
 
-
-class Environment(gym.Env):
+class Environment:
     def __init__(self, dynamics, controller, observer):
         """
         Initializes a simulation environment
@@ -18,19 +15,16 @@ class Environment(gym.Env):
         self.controller = controller
         self.observer = observer
         
-        #Define gym environment parameters
-        self.action_space = spaces.Box(low = -np.inf, high = np.inf, shape = (self.dynamics.inputDimn, ))
-        self.observation_space = spaces.Box(low = -np.inf, high = np.inf, shape = (self.dynamics.stateDimn, ))
+        #define environment parameters
         self.iter = 0 #number of iterations
         self.t = 0 #time in seconds 
-        self.reward = 0
-        self.info = {}
         self.done = False
         
         #Store system state
         self.x = self.dynamics.get_state() #Actual state of the system
         self.x0 = self.x #store initial condition for use in reset
         self.xObsv = None #state as read by the observer
+        self.ptCloud = None #point cloud state as read by vision
         
         #Define history arrays
         self.xHist = self.x #initialize with the initial parameter
@@ -50,8 +44,6 @@ class Environment(gym.Env):
         #Reset gym environment parameters
         self.iter = 0 #number of iterations
         self.t = 0 #time in seconds
-        self.reward = 0
-        self.info = {}
         self.done = False
         
         #Reset system state
@@ -68,11 +60,9 @@ class Environment(gym.Env):
         self.CONTROL_FREQ = 50 #control frequency in Hz
         self.SIMS_PER_STEP = self.SIM_FREQ//self.CONTROL_FREQ #integer divide
     
-    def step(self, acs):
+    def step(self):
         """
         Step the sim environment by one integration
-        Inputs:
-            acs: sample from the action space (unused)
         """
         #retrieve current state information
         self._get_observation() #updates the observer
@@ -136,6 +126,19 @@ class Environment(gym.Env):
             return True
         return False
     
+    def run(self, N = 1):
+        """
+        Function to run the simulation N times
+        Inputs:
+            N (int): number of simulation examples to run
+        """
+        #loop over an overall simulation N times
+        for i in range(N):
+            self.reset()
+            while not self._is_done():
+                self.step() #step the environment while not done
+            self.render() #render the result
+            
     def render(self):
         """
         Provide visualization of the environment
