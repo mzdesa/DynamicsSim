@@ -147,7 +147,7 @@ class DoubleIntDyn(Dynamics):
         """
         #Set constant animtion parameters
         GOAL_POS = [10, 10]
-        OBS_POS = [5, 5.5]
+        OBS_POS = [5, 6]
         OBS_R = 1.5
         FREQ = 50 #control frequency, same as data update frequency
         

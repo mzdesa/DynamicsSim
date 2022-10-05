@@ -14,27 +14,31 @@ x0 = np.array([[0, 0, 0, 0.5, 0, 0]]).T
 dynamics = DoubleIntDyn(x0)
 
 #create an observer based on the dynamics object with noise parameters
-mean = None
-sd = None
+mean = 0
+sd = 0.01
 observer = DoubleIntObserver(dynamics, mean, sd)
 
 #create a circular obstacle
 r = 1.5
-c = np.array([[5, 5.5, 0]]).T
+c = np.array([[5, 6, 0]]).T
 circle = Circle(r, c)
 
 #create a depth camera
 depthCam = DepthCam(circle, observer, mean = None, sd = None)
 
 #create a depth-based obstacle queue
-buffer = 1.5+0.3 #set based on radius of obstacle for a static test
-queueSize = 1
-queueType = 'static' #make it static for now to test out CBF
-obstacleQueue = ObstacleQueue(observer, depthCam, buffer, queueSize, queueType=queueType)
-
+queueType = 'depth'
 if queueType == 'static':
     #set the static queue using the obstacle position
+    buffer = 1.5 + 0.3
+    queueSize = 1
+    obstacleQueue = ObstacleQueue(observer, depthCam, buffer, queueSize, queueType=queueType)
     obstacleQueue.set_static_data([c]) #use the center position defined above
+else:
+    buffer = 0.3 #set based on radius of obstacle for a static test
+    queueSize = 10
+    obstacleQueue = ObstacleQueue(observer, depthCam, buffer, queueSize, queueType=queueType)
+    
 
 #create a trajectory
 start = np.array([[0, 0, 0]]).T #Pass in simply spatial dimensions into the system

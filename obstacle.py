@@ -97,7 +97,6 @@ class ObstacleQueue:
             
             #convert these points into the spatial frame
             knnSpatial = self.depth_to_spatial(knn)
-            
             #update each barrier point according to the KNN
             for i in range(self.queueSize):
                 self.barriers[i].set_barrier_pt(knnSpatial[:, i].reshape((3, 1)))
