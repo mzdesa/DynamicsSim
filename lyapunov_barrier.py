@@ -20,13 +20,11 @@ class LyapunovBarrier:
         #parameters to store values
         self._vals = None #stored derivatives + value of function (initialize as None)
     
-    def eval(self, x, u, t):
+    def eval(self, u):
         """
         Returns a list of derivatives (going until zeroth derivative) of the lyapunov/Barrier function.
         Args:
-            x (numpy array, (input_dimn x 1)): current state vector of system
             u (numpy array, (input_dimn x 1)): current input vector to system
-            t (float): current time with respect to simulation state
         Returns:
         [..., vDDot, vDot, v] ((self.dynamics.relDegree + 1, 1) numpy Array): dynamics.relDegree lyapunov/Barrier time derivs, Descending order
         """
@@ -48,25 +46,27 @@ ADD YOUR LYAPUNOV FUNCTIONS HERE
 """
 
 class DoubleIntLyapunov(LyapunovBarrier):
-    def __init__(self, stateDimn, inputDimn, dynamics):
+    def __init__(self, stateDimn, inputDimn, dynamics, observer):
         """
         Double integrator system Lyapunov function.
         Args:
             stateDimn (int): length of state vector
             inputDimn (int): length of input vector
-            dynamics (Dynamics): 
+            dynamics (Dynamics): Dynamics object
+            observer (Observer): Observer object
         """
-        self._goal_pt = None
         super().__init__(stateDimn, inputDimn, dynamics)
+        self._goal_pt = None
+        self.observer = observer
         
     def set_goal_pt(self, pt):
         """
         Function to update the goal point of the system
 
         Args:
-            pt (2 x 1 numpy array): new point to be used for a lyapunov function, (x, y) position
+            pt (3 x 1 numpy array): new point to be used for a lyapunov function, (x, y, z) position
         """
-        self._barrierPt = pt
+        self._goal_pt = pt
     
     def get_goal_pt(self):
         """
@@ -74,8 +74,19 @@ class DoubleIntLyapunov(LyapunovBarrier):
         """
         return self._barrierPt
     
-    def eval(self, x, u, t):
-        return super().eval(x, u, t)
+    def eval(self, u):
+        #get goal point
+        x_g = self.get_goal_pt()
+        
+        #first, get the spatial and velocity vectors from the observer
+        x = self.observer.get_pos()
+        v = self.observer.get_vel()
+        
+        #evaluate lyapunov function
+        v = (0.5*((x-x_g).T@(x-x_g)) + 0.5*((v-goal_vel).T@(v-goal_vel))+epsilon*((x-x_g).T@(v-goal_vel)))[0, 0]
+        vDot = ...
+        vDDot = ...
+        return self._vals
     
 """
 ********************************
@@ -84,24 +95,25 @@ ADD YOUR BARRIER FUNCTIONS HERE
 """
 
 class PointBarrier(LyapunovBarrier):
-    def __init__(self, stateDimn, inputDimn, dynamics):
+    def __init__(self, stateDimn, inputDimn, dynamics, observer):
         """
         Double integrator system Lyapunov function.
         Args:
             stateDimn (int): length of state vector
             inputDimn (int): length of input vector
-            dynamics (Dynamics): 
+            dynamics (Dynamics): dynamics object
+            observer (DoubleIntObserver): observer object
         """
+        super().__init__(stateDimn, inputDimn, dynamics)
         self._barrierPt = None
         self._buffer = 0.1 #barrier buffer
-        super().__init__(stateDimn, inputDimn, dynamics)
+        self.observer = observer #store the system observer
         
     def set_barrier_pt(self, pt):
         """
-        Function to update the point used in the barrier function
-
+        Function to update the point used in the barrier function (in the world frame)
         Args:
-            pt (2 x 1 numpy array): new point to be used for a barrier function, (x, y) position
+            pt (3 x 1 numpy array): new point to be used for a barrier function, (x, y, z) position
         """
         self._barrierPt = pt
     
@@ -111,15 +123,26 @@ class PointBarrier(LyapunovBarrier):
         """
         return self._barrierPt
     
-    def eval(self, x, u, t):
+    def eval(self, u):
         """
         Evaluate the Euclidean distance to the barrier point.
-
         Args:
-            x (stat_dimn x 1 numpy array): current state vector
-            u (_type_): current input vector
-            t (_type_): current time in simulation
+            u (input_dimn x 1 numpy array): current input vector
         """
-        #evaluate the barrier function value
-        h = np.linalg.norm(x[0:2].reshape((2, 1)) - self.get_barrier_pt())^2 - self._buffer**2
+        #first, get the spatial and velocity vectors from the observer
+        x = self.observer.get_pos()
+        v = self.observer.get_vel()
         
+        #evaluate the barrier function value
+        h = np.linalg.norm(x - self._barrierPt)^2 - self._buffer**2
+        
+        #evaluate its first derivative - assume a still obstacle
+        hDot = (2*(v).T@(x - self._barrierPt))[0, 0]
+        
+        #evaluate its second derivative - assume double integrator point mass dynamics
+        xddot = np.array([[u[0, 0], u[1, 0], 0]]).T #pull directly from the force vector, double integrator system
+        hDDot = 2*((xddot).T@(x - self._barrierPt) + v.T@v)[0, 0]
+        
+        #return the two derivatives and the barrier function
+        self._vals = [hDDot, hDot, h]
+        return self._vals
