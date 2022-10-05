@@ -33,6 +33,8 @@ class Circle:
         Returns a set of points on the obstacle for a set of angles around the circle
         Args:
             thetaArr ((N, ) numpy array): array of N theta values to evaluate the obstalce position
+        Returns:
+            (3xN) Numpy array: set of N points on the circle in R3
         """
         obsPts = np.zeros((3, thetaArr.shape[0]))
         for i in range(thetaArr.shape[0]):
@@ -40,26 +42,26 @@ class Circle:
             obsPts[:, i] = (np.array([[self._r*np.cos(thetaArr[i]), self._r*np.sin(thetaArr[i]), 0]]).T + self._c).reshape((3, ))
         return obsPts
     
-class BarrierQueue:
-    def __init__(self, dynamics, observer, depthCam, buffer, queueSize):
+class ObstacleQueue:
+    def __init__(self, observer, depthCam, buffer, queueSize, queueType = 'static'):
         """
-        Class to keep track of the barrier functions used to avoid obstacles.
+        Class to keep track of the obstacles through barrier functions.
         Args:
-            dynamics (Dynamics): dynamics object
             observer (Observer): observer object
             depthCam (DepthCam): depth camera object
             buffer (float): buffer to be used in CBF computation
             queueSize (float): number of CBFs to be using simultaneously
+            queueType (string): 'static' if a constant CBF (applied to entire obs), 'depth' if a depth-based CBF (applied pointwise)
         """
         #store input parameters
-        self.dynamics = dynamics
         self.observer = observer
         self.depthCam = depthCam
         self.buffer = buffer
         self.queueSize = queueSize
+        self.queueType = queueType
         
         #create queue of queueSize PointBarriers
-        self.barriers = [PointBarrier(dynamics.inputDimn, dynamics.stateDimn, dynamics, observer, buffer) for i in range(queueSize)]
+        self.barriers = [PointBarrier(self.observer.inputDimn, self.observer.stateDimn, self.observer.dynamics, observer, buffer) for i in range(queueSize)]
         
     def depth_to_spatial(self, ptMatrix):
         """
@@ -76,13 +78,15 @@ class BarrierQueue:
     def update_queue(self):
         """
         Updates the barrier queue depending on the motion of the system.
+        Will only need to update the queue if the barrier is depth-based.
         """
-        #solve for latest KNN points in the VEHICLE FRAME - maybe have them implement the KNN function as well?
-        knn = self.depthCam.get_knn(self.queueSize)
-        
-        #convert these points into the spatial frame
-        knnSpatial = self.depth_to_spatial(knn)
-        
-        #update each barrier point according to the KNN
-        for i in range(self.queueSize):
-            self.barriers[i].set_barrier_pt(knnSpatial[:, i].reshape((3, 1)))
+        if self.queueType == 'depth':
+            #solve for latest KNN points in the VEHICLE FRAME - maybe have them implement the KNN function as well?
+            knn = self.depthCam.get_knn(self.queueSize)
+            
+            #convert these points into the spatial frame
+            knnSpatial = self.depth_to_spatial(knn)
+            
+            #update each barrier point according to the KNN
+            for i in range(self.queueSize):
+                self.barriers[i].set_barrier_pt(knnSpatial[:, i].reshape((3, 1)))

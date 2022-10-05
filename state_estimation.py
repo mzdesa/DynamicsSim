@@ -2,20 +2,18 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 class StateObserver:
-    def __init__(self, dynamics, stateDimn, inputDimn, mean = None, sd = None):
+    def __init__(self, dynamics, mean = None, sd = None):
         """
         Init function for state observer
 
         Args:
             dynamics (Dynamics): Dynamics object instance
-            stateDimn (int): length of state vector
-            inputDimn (int): length of input vector
             mean (float, optional): Mean for gaussian noise. Defaults to None.
             sd (float, optional): standard deviation for gaussian noise. Defaults to None.
         """
         self.dynamics = dynamics
-        self.stateDimn = stateDimn
-        self.inputDimn = inputDimn
+        self.stateDimn = dynamics.stateDimn
+        self.inputDimn = dynamics.inputDimn
         self.mean = mean
         self.sd = sd
         
@@ -29,18 +27,16 @@ class StateObserver:
         return self.dynamics.get_state()
     
 class DoubleIntObserver(StateObserver):
-    def __init__(self, dynamics, stateDimn, inputDimn, mean, sd):
+    def __init__(self, dynamics, mean, sd):
         """
         Init function for state observer
 
         Args:
             dynamics (Dynamics): Dynamics object instance
-            stateDimn (int): length of state vector
-            inputDimn (int): length of input vector
             mean (float, optional): Mean for gaussian noise. Defaults to None.
             sd (float, optional): standard deviation for gaussian noise. Defaults to None.
         """
-        super().__init__(dynamics, stateDimn, inputDimn, mean, sd)
+        super().__init__(dynamics, mean, sd)
         
         #define standard basis vectors to refer to
         self.e1 = np.array([[1, 0, 0]]).T
@@ -80,12 +76,11 @@ class DoubleIntObserver(StateObserver):
         return np.hstack((r1, r2/np.linalg.norm(r2), self.e3))
     
 class DepthCam:
-    def __init__(self, dynamics, circle, observer, stateDimn, inputDimn, mean = None, sd = None):
+    def __init__(self, circle, observer, mean = None, sd = None):
         """
         Init function for depth camera observer
 
         Args:
-            dynamics (Dynamics): Dynamics object instance
             circle (Circle): Circle object instance
             observer (DoubleIntObserver): Double integrator observer, or one of a similar format
             stateDimn (int): length of state vector
@@ -93,11 +88,10 @@ class DepthCam:
             mean (float, optional): Mean for gaussian noise. Defaults to None.
             sd (float, optional): standard deviation for gaussian noise. Defaults to None.
         """
-        self.dynamics = dynamics
         self.circle = circle
         self.observer = observer
-        self.stateDimn = stateDimn
-        self.inputDimn = inputDimn
+        self.stateDimn = self.observer.stateDimn
+        self.inputDimn = self.observer.inputDimn
         self.mean = mean
         self.sd = sd
         

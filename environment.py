@@ -1,4 +1,3 @@
-#Python Dependencies
 import numpy as np
 
 class Environment:
@@ -26,16 +25,16 @@ class Environment:
         self.xObsv = None #state as read by the observer
         self.ptCloud = None #point cloud state as read by vision
         
-        #Define history arrays
-        self.xHist = self.x #initialize with the initial parameter
-        self.uHist = None
-        self.tHist = None
-        
         #Define simulation parameters
         self.SIM_FREQ = 1000 #integration frequency in Hz
         self.CONTROL_FREQ = 50 #control frequency in Hz
-        self.SIMS_PER_STEP = self.SIM_FREQ/self.CONTROL_FREQ
+        self.SIMS_PER_STEP = self.SIM_FREQ//self.CONTROL_FREQ
         self.TOTAL_SIM_TIME = 10 #total simulation time in s
+        
+        #Define history arrays
+        self.xHist = np.zeros((self.dynamics.stateDimn, self.TOTAL_SIM_TIME*self.CONTROL_FREQ))
+        self.uHist = np.zeros((self.dynamics.inputDimn, self.TOTAL_SIM_TIME*self.CONTROL_FREQ))
+        self.tHist = np.zeros((1, self.TOTAL_SIM_TIME*self.CONTROL_FREQ))
         
     def reset(self):
         """
@@ -51,15 +50,10 @@ class Environment:
         self.xObsv = None #reset observer state
         
         #Define history arrays
-        self.xHist = self.x
-        self.uHist = None
-        self.tHist = None
-        
-        #Define simulation constants
-        self.SIM_FREQ = 1000 #integration frequency in Hz
-        self.CONTROL_FREQ = 50 #control frequency in Hz
-        self.SIMS_PER_STEP = self.SIM_FREQ//self.CONTROL_FREQ #integer divide
-    
+        self.xHist = np.zeros((self.dynamics.stateDimn, self.TOTAL_SIM_TIME*self.CONTROL_FREQ + 1))
+        self.uHist = np.zeros((self.dynamics.inputDimn, self.TOTAL_SIM_TIME*self.CONTROL_FREQ + 1))
+        self.tHist = np.zeros((1, self.TOTAL_SIM_TIME*self.CONTROL_FREQ + 1))
+
     def step(self):
         """
         Step the sim environment by one integration
@@ -68,39 +62,30 @@ class Environment:
         self._get_observation() #updates the observer
         
         #solve for the control input using the observed state
-        self.controller.eval_input(self.xObsv, self.t)
+        self.controller.eval_input(self.t)
         
-        #integrate through that input over sim freq
+        #Zero order hold over the controller frequency
         for i in range(self.SIMS_PER_STEP):
-            self.dynamics.integrate(self.controler.get_input(), self.t, 1/self.SIM_FREQ) #integrate dynamics
+            self.dynamics.integrate(self.controller.get_input(), self.t, 1/self.SIM_FREQ) #integrate dynamics
             self.t += 1/self.SIM_FREQ #increment the time
             
         #update the deterministic system data, iterations, and history array
-        self._update_data()
-        
-        #check if the simulation is complete
-        self._is_done()
-        
-        #update reward (only implemented for reinforcement learning)
-        self._get_reward()
-        
-        return self.x, self.reward, self.done, self.info
-        
+        self._update_data()        
     
     def _update_data(self):
         """
         Update history arrays and deterministic state data
         """
+        #append the input, time, and state to their history queues
+        self.xHist[:, self.iter] = self.x.reshape((self.dynamics.stateDimn, ))
+        self.uHist[:, self.iter] = (self.controller.get_input()).reshape((self.dynamics.inputDimn, ))
+        self.tHist[:, self.iter] = self.t
+        
         #update the actual state of the system
         self.x = self.dynamics.get_state()
         
         #update the number of iterations of the step function
         self.iter +=1
-        
-        #append the input, time, and state to their history queues
-        self.xHist = np.hstack((self.xHist, self.x))
-        self.uHist = np.hstack((self.uHist, self.controller.get_input()))
-        self.tHist = np.hstack((self.tHist, self.t))
     
     def _get_observation(self):
         """
@@ -136,10 +121,11 @@ class Environment:
         for i in range(N):
             self.reset()
             while not self._is_done():
+                print("Simulation Time Remaining: ", self.TOTAL_SIM_TIME - self.t)
                 self.step() #step the environment while not done
-            self.render() #render the result
+            self.visualize() #render the result
             
-    def render(self):
+    def visualize(self):
         """
         Provide visualization of the environment
         """

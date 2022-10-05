@@ -6,35 +6,37 @@ from collections import deque
 File containing controllers 
 """
 class Controller:
-    def __init__(self, dynamics = None, observer = None, lyapunov = None, barrierQueue = None, uBounds = None):
+    def __init__(self, observer, lyapunov = None, trajectory = None, obstacleQueue = None, uBounds = None):
         """
         Skeleton class for feedback controllers
         Args:
             dynamics (Dynamics): system Dynamics object
             observer (Observer): state observer object
             lyapunov (LyapunovBarrier): lyapunov functions, LyapunovBarrier object
-            barrierQueue (BarrierQueue): BarrierQueue object, stores all barriers for the system to avoid
+            trajectory (Trajectory): trajectory for the controller to track (could just be a constant point!)
+            obstacleQueue (ObstacleQueue): ObstacleQueue object, stores all barriers for the system to avoid
             uBounds ((Dynamics.inputDimn x 2) numpy array): minimum and maximum input values to the system
         """
         #store input parameters
-        self.dynamics = dynamics
         self.observer = observer
         self.lyapunov = lyapunov
-        self.barrierQueue = barrierQueue
+        self.trajectory = trajectory
+        self.obstacleQueue = obstacleQueue
+        self.uBounds = uBounds
         
         #store input
         self._u = None
     
-    def eval_input(self):
+    def eval_input(self, t):
         """
         Solve for and return control input
-        Args:
-            x ((Dynamics.stateDimn x 1) NumPy array): current state vector
-            t (float): current time in simulation
+        Inputs:
+            t (float): time in simulation
         Returns:
             u ((Dynamics.inputDimn x 1)): input vector, as determined by controller
         """
-        return np.zeros((self.inputDimn, 1))
+        self._u = np.zeros((self.observer.inputDimn, 1))
+        return self._u
     
     def get_input(self):
         """
@@ -45,24 +47,17 @@ class Controller:
         return self._u
 
 class CLF_CBF_QP(Controller):
-    def __init__(self, dynamics = None, observer = None, lyapunov = None, barrierQueue = None, uBounds = None):
+    def __init__(self, observer, lyapunov, trajectory, obstacleQueue, uBounds = None):
         """
         Skeleton class for feedback controllers
         Args:
-            dynamics (Dynamics): system Dynamics object
             observer (Observer): state observer object
             lyapunov (LyapunovBarrier): lyapunov functions, LyapunovBarrier object
-            barrierQueue (BarrierQueue): BarrierQueue object, stores all barriers for the system to avoid
+            trajectory (Trajectory): trajectory for the controller to track (could just be a constant point!)
+            obstacleQueue (ObstacleQueue): ObstacleQueue object, stores all barriers for the system to avoid
             uBounds ((Dynamics.inputDimn x 2) numpy array): minimum and maximum input values to the system
         """
-        #store input parameters
-        self.dynamics = dynamics
-        self.observer = observer
-        self.lyapunov = lyapunov
-        self.barrierQueue = barrierQueue
-        
-        #store input
-        self._u = None
+        super().__init__(observer, lyapunov, trajectory, obstacleQueue, uBounds)
         
         #store controller parameters
         self._useCBF = True
@@ -70,8 +65,8 @@ class CLF_CBF_QP(Controller):
         self._useOptiSmoothing = False
         
         #store optimization tuning parameters - number of CBF tuning constants equal the relative degree + 1
-        self._cbfAlphas = np.ones((1, self.dynamics.relDegree+1))
-        self._clfGammas = np.ones((1, self.dynamics.relDegree+1))
+        self._cbfAlphas = np.ones((1, self.observer.dynamics.relDegree+1))
+        self._clfGammas = np.ones((1, self.observer.dynamics.relDegree+1))
         
     def set_params(self, useCBF, useCLF, useOptiSmoothing, cbfAlphas, clfGammas):
         """
@@ -119,17 +114,17 @@ class CLF_CBF_QP(Controller):
         #Enforce CLF constraint
         if self._useCLF:
             #Apply matrix multiplication to evaluate the constraint
-            opti.subject_to((self._clfGammas @ self.lyapunov.eval(x, u, t))[0, 0] <= delta)
+            opti.subject_to((self._clfGammas @ self.lyapunov.eval(u, t))[0, 0] <= delta)
 
         #Enforce CBF constraint
         if self._useCBF:
-            #First update the barrier queue
-            self.barrierQueue.update_queue()
+            #First update the barrier queue - will get the latest KNN in the queue or update barrier points
+            self.obstacleQueue.update_queue()
             
             #iterate through the list of CBFs
-            for cbf in self.barrierQueue.barriers:
+            for cbf in self.obstacleQueue.barriers:
                 #Apply matrix multiplication to evaluate the constraint - extract each row of tuning constants
-                opti.subject_to((self._cbfAlphas @ cbf.eval(x, u, t))[0, 0] >= 0)
+                opti.subject_to((self._cbfAlphas @ cbf.eval(u, t))[0, 0] >= 0)
 
         #Define Cost Function
         H = np.eye(self.input_dimn)
@@ -160,26 +155,21 @@ class CBF_QP(Controller):
     """
     Class for a CBF-QP Controller. Requires a nominal controller to be passed in.
     """
-    def __init__(self, dynamics = None, observer = None, barrierQueue = None, uBounds = None, refController = None):
+    def __init__(self, observer, trajectory, refController, obstacleQueue, uBounds = None):
         """
         Initialize a CBF QP controller
         Args:
-            dynamics (Dynamics): system Dynamics object
             observer (Observer): state Observer object
-            barrierQueue (BarrierQueue): BarrierQueue object, stores all barriers for the system to avoid
+            trajectory (Trajectory): trajectory for the controller to track (could just be a constant point!)
+            obstacleQueue (ObstacleQueue): ObstacleQueue object, stores all barriers for the system to avoid
+            refController (Controller): reference controller for use in CBF QP control
             uBounds ((Dynamics.inputDimn x 2) numpy array): minimum and maximum input values to the system
-            refController (Controller object): reference controller for use in CBF QP control
         """
-        #store input parameters
-        self.dynamics = dynamics
-        self.observer = observer
-        self.barrierQueue = barrierQueue
-        self.refController = refController
-        
-        #store input
-        self._u = None
+        #run the super class init
+        super().__init__(observer, None, trajectory, obstacleQueue, uBounds)        
         
         #store controller parameters
+        self.refController = refController
         self._useCBF = True
         self._useOptiSmoothing = False
         
@@ -224,10 +214,10 @@ class CBF_QP(Controller):
         #Enforce CBF constraint
         if self._useCBF:
             #First update the barrier queue
-            self.barrierQueue.update_queue()
+            self.obstacleQueue.update_queue()
             
             #iterate through the list of CBFs
-            for cbf in self.barrierQueue.barriers:
+            for cbf in self.obstacleQueue.barriers:
                 #Apply matrix multiplication to evaluate the constraint - extract each row of tuning constants
                 opti.subject_to((self._cbfAlphas @ cbf.eval(x, u, t))[0, 0] >= 0)
 
@@ -257,28 +247,25 @@ class CBF_QP(Controller):
         return self._u, solverFailed
     
 class StateFB(Controller):
-    def __init__(self):
+    def __init__(self, observer, trajectory):
         """
         Initialize a state feedback controller
         """
-        #store input
-        self._u = None
+        #initialize the super class
+        super().__init__(observer, lyapunov = None, trajectory = trajectory, obstacleQueue = None, uBounds = None)
+                
+        #store controller gain matrix
+        self.K = None 
         
-        #store controller parameters
-        self._xG = None #goal state
-        self.K = None #controller gain matrix
-        
-    def set_params(self, xG, K):
+    def set_params(self, K):
         """
         Set the parameters for the controller
         Args:
-            xG ((Dynamics.StateDimn x 1) numpy array): goal state for FB controller
             K ((Dynamics.InputDimn x Dynamics.StateDimn) numpy array): gain matrix for state feedback
         """
-        self._xG = xG
         self.K = K
     
-    def eval_input(self, x, t):
+    def eval_input(self, t):
         """
         Solve for and return control input using state feedback
         Args:
@@ -287,5 +274,12 @@ class StateFB(Controller):
         Returns:
             u ((Dynamics.inputDimn x 1)): input vector, as determined by controller
         """
-        self._u = self.K@(self._xG - x)
+        #first call the goal position and velocity
+        xG, vG, aG = self.trajectory.get_state(t)
+        xG = np.vstack((xG, vG)) #reform the goal state vector
+        
+        #get the current state vector
+        x = self.observer.get_state()
+        
+        self._u = self.K@(xG - x)
         return self._u

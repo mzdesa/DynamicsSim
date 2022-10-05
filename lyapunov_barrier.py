@@ -20,11 +20,12 @@ class LyapunovBarrier:
         #parameters to store values
         self._vals = None #stored derivatives + value of function (initialize as None)
     
-    def eval(self, u):
+    def eval(self, u, t):
         """
         Returns a list of derivatives (going until zeroth derivative) of the lyapunov/Barrier function.
         Args:
             u (numpy array, (input_dimn x 1)): current input vector to system
+            t (float): current time in simulation
         Returns:
         [..., vDDot, vDot, v] ((self.dynamics.relDegree + 1, 1) numpy Array): dynamics.relDegree lyapunov/Barrier time derivs, Descending order
         """
@@ -114,7 +115,7 @@ class PointBarrier(LyapunovBarrier):
         """
         return self._barrierPt
     
-    def eval(self, u):
+    def eval(self, u, t):
         """
         Evaluate the Euclidean distance to the barrier point.
         Args:
