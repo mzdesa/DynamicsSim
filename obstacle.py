@@ -62,7 +62,18 @@ class ObstacleQueue:
         
         #create queue of queueSize PointBarriers
         self.barriers = [PointBarrier(self.observer.inputDimn, self.observer.stateDimn, self.observer.dynamics, observer, buffer) for i in range(queueSize)]
-        
+    
+    def set_static_data(self, centerPts):
+        """
+        Function to set the barrier points for static obstacles
+        Args:
+            centerPts (List): list of queueSize [x, y, z] center points of the obstacle for the barriers to use
+        """
+        i = 0
+        for bar in self.barriers:
+            bar.set_barrier_pt(centerPts[i])
+            i+=1
+    
     def depth_to_spatial(self, ptMatrix):
         """
         NOTE: THIS IS WHAT STUDENTS SHOULD IMPLEMENT

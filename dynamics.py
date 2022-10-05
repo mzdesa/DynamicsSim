@@ -136,39 +136,79 @@ class DoubleIntDyn(Dynamics):
         """
         #use the velocity to get the first component.
         
-    def show_animation(self, xData, u, t, animate = False):
+    def show_animation(self, xData, uData, tData, animate = True):
+        """
+        Shows the animation and visualization of data for this system.
+        Args:
+            xData (stateDimn x N Numpy array): state vector history array
+            u (inputDimn x N numpy array): input vector history array
+            t (1 x N numpy array): time history
+            animate (bool, optional): Whether to generate animation or not. Defaults to True.
+        """
+        #Set constant animtion parameters
+        GOAL_POS = [10, 10]
+        OBS_POS = [5, 5.5]
+        OBS_R = 1.5
+        FREQ = 50 #control frequency, same as data update frequency
+        
         if animate:
             fig, ax = plt.subplots()
             # set the axes limits
-            ax.axis([0, 10, -1,1])
+            ax.axis([0, GOAL_POS[0]+2.5, 0, GOAL_POS[1]+2.5])
+            # set equal aspect such that the circle is not shown as ellipse
+            ax.set_aspect("equal")
             # create a point in the axes
             point, = ax.plot(0,1, marker="o")
-            num_frames = self.q_hist.shape[1]-1
-            #define animation callback
+            num_frames = xData.shape[1]-1
+
+            #plot the obstacle
+            circle = plt.Circle((OBS_POS[0], OBS_POS[1]), radius = OBS_R, fc = 'c')
+            plt.gca().add_patch(circle)
+            ax.scatter([GOAL_POS[0]], [GOAL_POS[1]], color = 'y') #goal position
+                
             def animate(i):
-                #plot the distance to the car ahead on the x axis
-                x = xData[0, i] #extract the x position
-                #keep the y position of the car as zero
-                y = 0
+                x = xData[0, i]
+                y = xData[1, i]
                 point.set_data(x, y)
                 return point,
-            #Plot the obstacle car at (10, 0)
-            ax.scatter([10], [0], color = 'r')
-            #crete animation
-            anim = animation.FuncAnimation(fig, animate, frames=num_frames, interval=self.dynamics.dt*1000, blit=True)
-            plt.xlabel("Car Position (m)")
-            plt.title("Distance to Car Ahead")
-            plt.show()
             
-        #Now, plot the actual position versus the desired position to show effect of lyapunov function
+            anim = animation.FuncAnimation(fig, animate, frames=num_frames, interval=1/FREQ*1000, blit=True)
+            plt.xlabel("X Position (m)")
+            plt.ylabel("Y Position (m)")
+            plt.title("Position of Car in Space")
+            plt.show()
+
+        #Plot the spatial trajectory of the car
+        fig, ax = plt.subplots()
+        ax.set_aspect("equal")
         xCoords = xData[0, :].tolist() #extract all of the velocity data to plot on the y axis
         yCoords = xData[1, :].tolist()
-        GOAL_POS = [10, 10] #NOTE: constant goal position here
-                
-        #now, plot the velocities against time
-        plt.plot(xCoords, yCoords)
-        plt.plot(GOAL_POS[0], GOAL_POS[1])
-        plt.xlabel("Time (s)")
-        plt.ylabel("Position (m)")
-        plt.title("Car Position")
+        ax.plot(xCoords, yCoords)
+        ax.scatter([GOAL_POS[0]], [GOAL_POS[1]], color = 'y') #goal position
+        circle = plt.Circle((OBS_POS[0], OBS_POS[1]), radius = OBS_R, fc = 'c')
+        plt.gca().add_patch(circle)
+        plt.xlabel("X Position (m)")
+        plt.ylabel("Y Position (m)")
+        plt.title("Position of Car in Space")
+        plt.show()
+        
+        #Plot each state variable in time
+        fig, axs = plt.subplots(6)
+        fig.suptitle('Evolution of States and Inputs in Time')
+        xlabel = 'Time (s)'
+        ylabels = ['X Pos (m)', 'Y Pos (m)', 'X Vel (m/s)', 'Y Vel (m/s)', 'uX (N)', 'uY (N)']
+        indices = [0, 1, 3, 4] #skip the z coordinates - indices in the state vector to plot
+        n = 0 #index in the subplot
+        #plot the states
+        for i in indices:
+            axs[n].plot(tData.reshape((tData.shape[1], )).tolist(), xData[i, :].tolist())
+            axs[n].set(ylabel=ylabels[n]) #pull labels from the list above
+            axs[n].grid()
+            n += 1
+        #plot the inputs
+        for i in range(2):
+            axs[i+4].plot(tData.reshape((tData.shape[1], )).tolist(), uData[i, :].tolist())
+            axs[i+4].set(ylabel=ylabels[i+4])
+            axs[i+4].grid()
+        axs[5].set(xlabel = xlabel)
         plt.show()

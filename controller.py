@@ -174,7 +174,7 @@ class CBF_QP(Controller):
         self._useOptiSmoothing = False
         
         #store optimization tuning parameters - number of CBF tuning constants equal the relative degree + 1
-        self._cbfAlphas = np.ones((1, self.dynamics.relDegree+1))
+        self._cbfAlphas = np.ones((1, self.observer.dynamics.relDegree+1))
         
     def set_params(self, useCBF, useOptiSmoothing, cbfAlphas):
         """
@@ -206,10 +206,10 @@ class CBF_QP(Controller):
         opti = ca.Opti()
         
         #set up optimization variables
-        u = opti.variable(self.input_dimn, 1)
+        u = opti.variable(self.observer.inputDimn, 1)
         
         #Solve for reference control input
-        uRef = self.refController.eval_input(x, t)
+        uRef = self.refController.eval_input(t)
 
         #Enforce CBF constraint
         if self._useCBF:
@@ -218,11 +218,15 @@ class CBF_QP(Controller):
             
             #iterate through the list of CBFs
             for cbf in self.obstacleQueue.barriers:
-                #Apply matrix multiplication to evaluate the constraint - extract each row of tuning constants
-                opti.subject_to((self._cbfAlphas @ cbf.eval(x, u, t))[0, 0] >= 0)
+                #Compute barrier constraint for arbitrary relative degree
+                barrierDerivs = cbf.eval(u, t) #gets a list of CBF derivatives
+                constr = 0
+                for i in range(self.observer.dynamics.relDegree + 1):
+                    constr += self._cbfAlphas[0, i]*barrierDerivs[i]
+                opti.subject_to(constr >= 0)
 
         #Define Cost Function
-        H = np.eye(self.input_dimn)
+        H = np.eye(self.observer.inputDimn)
         cost = ca.mtimes((u-uRef).T, ca.mtimes(H, (u-uRef)))
 
         #set up optimization problem
@@ -238,10 +242,10 @@ class CBF_QP(Controller):
         except:
             print("Solver failed!")
             solverFailed = True
-            uOpt = np.zeros((self.input_dimn, 1))
+            uOpt = np.zeros((self.observer.inputDimn, 1))
 
         #store input in class param
-        self._u = uOpt.reshape((self.input_dimn, 1))
+        self._u = uOpt.reshape((self.observer.inputDimn, 1))
         
         #return result
         return self._u, solverFailed

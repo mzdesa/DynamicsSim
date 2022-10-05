@@ -41,7 +41,7 @@ class DoubleIntObserver(StateObserver):
         #define standard basis vectors to refer to
         self.e1 = np.array([[1, 0, 0]]).T
         self.e2 = np.array([[0, 1, 0]]).T
-        self.e3 = np.array(([0, 0, 1])).T
+        self.e3 = np.array([[0, 0, 1]]).T
     
     def get_pos(self):
         """
@@ -68,10 +68,17 @@ class DoubleIntObserver(StateObserver):
         """
         #first column is the unity vector in direction of velocity. Note that this is already noisy.
         r1 = self.get_vel()
-        r1 = r1/np.linalg.norm(r1) #do not recall the get_vel() function as it is stochastic
+        if(np.linalg.norm(r1) != 0):
+            #do not re-call the get_vel() function as it is stochastic
+            r1 = r1/np.linalg.norm(r1) 
+        else:
+            #set the r1 direction to be e1 if velocity is zero
+            r1 = self.e1
+            
         #calculate angle of rotation WRT x-axis
         theta = np.arccos(r1[0, 0])
         r2 = np.array([[-np.sin(theta), np.cos(theta), 0]]).T
+        
         #assemble the rotation matrix, normalize the second column, set r3 = e3
         return np.hstack((r1, r2/np.linalg.norm(r2), self.e3))
     

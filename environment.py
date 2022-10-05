@@ -29,7 +29,7 @@ class Environment:
         self.SIM_FREQ = 1000 #integration frequency in Hz
         self.CONTROL_FREQ = 50 #control frequency in Hz
         self.SIMS_PER_STEP = self.SIM_FREQ//self.CONTROL_FREQ
-        self.TOTAL_SIM_TIME = 10 #total simulation time in s
+        self.TOTAL_SIM_TIME = 12 #total simulation time in s
         
         #Define history arrays
         self.xHist = np.zeros((self.dynamics.stateDimn, self.TOTAL_SIM_TIME*self.CONTROL_FREQ))
@@ -90,13 +90,15 @@ class Environment:
     def _get_observation(self):
         """
         Updates self.xObsv using the observer data
+        Useful for debugging state information.
         """
-        pass
+        self.xObsv = self.observer.get_state()
+        # print("current orientation: ", self.observer.get_orient())
     
     def _get_reward(self):
         """
         Calculate the total reward for ths system and update the reward parameter.
-        Only implement for use for reinforcement learning.
+        Only implement for use in reinforcement learning.
         """
         return 0
     

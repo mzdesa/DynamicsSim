@@ -77,7 +77,7 @@ class DoubleIntLyapunov(LyapunovBarrier):
         v = (0.5*((x-xG).T@(x-xG)) + 0.5*((v-vG).T@(v-vG))+self.EPSILON*((x-xG).T@(v-vG)))[0, 0]
         vDot = 0 #TODO: Implement these derivatives
         vDDot = 0
-        self._vals = [vDDot, vDot, v]
+        self._vals = np.array([[vDDot, vDot, v]])
         return self._vals
     
 """
@@ -120,20 +120,22 @@ class PointBarrier(LyapunovBarrier):
         Evaluate the Euclidean distance to the barrier point.
         Args:
             u (input_dimn x 1 numpy array): current input vector
+        Returns:
+            (List): cbf time derivatives
         """
         #first, get the spatial and velocity vectors from the observer
         x = self.observer.get_pos()
         v = self.observer.get_vel()
         
         #evaluate the barrier function value
-        h = np.linalg.norm(x - self._barrierPt)^2 - self._buffer**2
+        h = ((x - self._barrierPt).T@(x - self._barrierPt))[0, 0] - self._buffer**2
         
         #evaluate its first derivative - assume a still obstacle
-        hDot = (2*(v).T@(x - self._barrierPt))[0, 0]
+        hDot = (2*v.T@(x - self._barrierPt))[0, 0]
         
         #evaluate its second derivative - assume double integrator point mass dynamics
-        xddot = np.array([[u[0, 0], u[1, 0], 0]]).T #pull directly from the force vector, double integrator system
-        hDDot = 2*((xddot).T@(x - self._barrierPt) + v.T@v)[0, 0]
+        xddot = u #pull directly from the force vector, double integrator system
+        hDDot = 2*(xddot.T@(x - self._barrierPt) + v.T@v)
         
         #return the two derivatives and the barrier function
         self._vals = [hDDot, hDot, h]
