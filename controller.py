@@ -6,24 +6,26 @@ from collections import deque
 File containing controllers 
 """
 class Controller:
-    def __init__(self, dynamics = None, lyapunov = None, barrier = [], uBounds = None):
+    def __init__(self, dynamics = None, observer = None, lyapunov = None, barrierQueue = None, uBounds = None):
         """
         Skeleton class for feedback controllers
         Args:
             dynamics (Dynamics): system Dynamics object
+            observer (Observer): state observer object
             lyapunov (LyapunovBarrier): lyapunov functions, LyapunovBarrier object
-            barrier (List of LyapunovBarrier): Python List of barrier functions, LyapunovBarrier objects
+            barrierQueue (BarrierQueue): BarrierQueue object, stores all barriers for the system to avoid
             uBounds ((Dynamics.inputDimn x 2) numpy array): minimum and maximum input values to the system
         """
         #store input parameters
         self.dynamics = dynamics
+        self.observer = observer
         self.lyapunov = lyapunov
-        self.barrier = barrier
+        self.barrierQueue = barrierQueue
         
         #store input
         self._u = None
     
-    def eval_input(self, x, t):
+    def eval_input(self):
         """
         Solve for and return control input
         Args:
@@ -43,19 +45,21 @@ class Controller:
         return self._u
 
 class CLF_CBF_QP(Controller):
-    def __init__(self, dynamics = None, lyapunov = None, barrier = [], uBounds = None):
+    def __init__(self, dynamics = None, observer = None, lyapunov = None, barrierQueue = None, uBounds = None):
         """
         Skeleton class for feedback controllers
         Args:
             dynamics (Dynamics): system Dynamics object
+            observer (Observer): state observer object
             lyapunov (LyapunovBarrier): lyapunov functions, LyapunovBarrier object
-            barrier (List of LyapunovBarrier): Python List of barrier functions, LyapunovBarrier objects
+            barrierQueue (BarrierQueue): BarrierQueue object, stores all barriers for the system to avoid
             uBounds ((Dynamics.inputDimn x 2) numpy array): minimum and maximum input values to the system
         """
         #store input parameters
         self.dynamics = dynamics
+        self.observer = observer
         self.lyapunov = lyapunov
-        self.barrier = barrier
+        self.barrierQueue = barrierQueue
         
         #store input
         self._u = None
@@ -94,15 +98,17 @@ class CLF_CBF_QP(Controller):
         """
         return self._u
         
-    def eval_input(self, x, t):
+    def eval_input(self, t):
         """
         Solve for and return control input using CBF CLF QP
         Args:
-            x ((Dynamics.stateDimn x 1) NumPy array): current state vector
             t (float): current time in simulation
         Returns:
             u ((Dynamics.inputDimn x 1)): input vector, as determined by controller
         """
+        #extract state vector from observer
+        x = self.observer.get_state()
+        
         #set up Casadi optimization
         opti = ca.Opti()
         
@@ -117,8 +123,11 @@ class CLF_CBF_QP(Controller):
 
         #Enforce CBF constraint
         if self._useCBF:
+            #First update the barrier queue
+            self.barrierQueue.update_queue()
+            
             #iterate through the list of CBFs
-            for cbf in self.barrier:
+            for cbf in self.barrierQueue.barriers:
                 #Apply matrix multiplication to evaluate the constraint - extract each row of tuning constants
                 opti.subject_to((self._cbfAlphas @ cbf.eval(x, u, t))[0, 0] >= 0)
 
@@ -151,18 +160,20 @@ class CBF_QP(Controller):
     """
     Class for a CBF-QP Controller. Requires a nominal controller to be passed in.
     """
-    def __init__(self, dynamics = None, barrier = [], uBounds = None, refController = None):
+    def __init__(self, dynamics = None, observer = None, barrierQueue = None, uBounds = None, refController = None):
         """
         Initialize a CBF QP controller
         Args:
             dynamics (Dynamics): system Dynamics object
-            barrier (List of LyapunovBarrier): Python List of barrier functions, LyapunovBarrier objects
+            observer (Observer): state Observer object
+            barrierQueue (BarrierQueue): BarrierQueue object, stores all barriers for the system to avoid
             uBounds ((Dynamics.inputDimn x 2) numpy array): minimum and maximum input values to the system
             refController (Controller object): reference controller for use in CBF QP control
         """
         #store input parameters
         self.dynamics = dynamics
-        self.barrier = barrier
+        self.observer = observer
+        self.barrierQueue = barrierQueue
         self.refController = refController
         
         #store input
@@ -190,15 +201,17 @@ class CBF_QP(Controller):
         #store optimization tuning parameters - number of CBF tuning constants equal the relative degree + 1
         self._cbfAlphas = cbfAlphas
     
-    def eval_input(self, x, t):
+    def eval_input(self, t):
         """
         Solve for and return control input using CBF QP
         Args:
-            x ((Dynamics.stateDimn x 1) NumPy array): current state vector
             t (float): current time in simulation
         Returns:
             u ((Dynamics.inputDimn x 1)): input vector, as determined by controller
         """
+        #extract state vector from observer
+        x = self.observer.get_state()
+        
         #set up Casadi optimization
         opti = ca.Opti()
         
@@ -210,8 +223,11 @@ class CBF_QP(Controller):
 
         #Enforce CBF constraint
         if self._useCBF:
+            #First update the barrier queue
+            self.barrierQueue.update_queue()
+            
             #iterate through the list of CBFs
-            for cbf in self.barrier:
+            for cbf in self.barrierQueue.barriers:
                 #Apply matrix multiplication to evaluate the constraint - extract each row of tuning constants
                 opti.subject_to((self._cbfAlphas @ cbf.eval(x, u, t))[0, 0] >= 0)
 
@@ -260,6 +276,7 @@ class StateFB(Controller):
             K ((Dynamics.InputDimn x Dynamics.StateDimn) numpy array): gain matrix for state feedback
         """
         self._xG = xG
+        self.K = K
     
     def eval_input(self, x, t):
         """

@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.spatial import cKDTree
 
 class StateObserver:
     def __init__(self, dynamics, stateDimn, inputDimn, mean = None, sd = None):
@@ -79,13 +80,13 @@ class DoubleIntObserver(StateObserver):
         return np.hstack((r1, r2/np.linalg.norm(r2), self.e3))
     
 class DepthCam:
-    def __init__(self, dynamics, obstacle, observer, stateDimn, inputDimn, mean = None, sd = None):
+    def __init__(self, dynamics, circle, observer, stateDimn, inputDimn, mean = None, sd = None):
         """
         Init function for depth camera observer
 
         Args:
             dynamics (Dynamics): Dynamics object instance
-            obstacle (Obstacle): Obstacle object instance
+            circle (Circle): Circle object instance
             observer (DoubleIntObserver): Double integrator observer, or one of a similar format
             stateDimn (int): length of state vector
             inputDimn (int): length of input vector
@@ -93,15 +94,15 @@ class DepthCam:
             sd (float, optional): standard deviation for gaussian noise. Defaults to None.
         """
         self.dynamics = dynamics
-        self.obstacle = obstacle
+        self.circle = circle
         self.observer = observer
         self.stateDimn = stateDimn
         self.inputDimn = inputDimn
         self.mean = mean
         self.sd = sd
         
-        #store the pointcloud dict
-        self._ptcloudData = {"ptcloud": None, "rotation": None, "position": None}
+        #stores the pointcloud dict in the vehicle frame (not spatial)
+        self._ptcloudData = {"ptcloud": None, "rotation": None, "position": None, "kd": None}
         
     def calc_ptcloud(self):
         """
@@ -110,7 +111,7 @@ class DepthCam:
         #define an array of angles
         thetaArr = np.linspace(0, 2*np.pi)
         #get the points in the world frame
-        obsPts = self.obstacle.get_pts(thetaArr)
+        obsPts = self.circle.get_pts(thetaArr)
         
         #transform these points into rays in the vehicle frame.
         Rsc = self.observer.get_orient() #get the rotation matrix
@@ -123,18 +124,49 @@ class DepthCam:
             ps = obsPts[:, i].reshape((3, 1))
             ptcloud[:, i] = (np.linalg.inv(Rsc)@(ps - psc)).reshape((3, ))
             
+        #generate the KD tree associated with the data
+        kdtree = cKDTree(ptcloud.T) #must store in transpose
+            
         #update the pointcloud dict with this data
         self._ptcloudData["ptcloud"] = ptcloud
         self._ptcloudData["rotation"] = Rsc
         self._ptcloudData["position"] = psc
+        self._ptcloudData["kd"] = kdtree
         return self._ptcloudData
         
-    def get_pointcloud(self):
+    def get_pointcloud(self, update = True):
         """
         Returns the pointcloud dictionary from the class attribute 
+        Args:
+            update: whether or not to recalculate the pointcloud
         Returns:
-            Dict: dictionary of pointcloud points, rotation matirx, position, and timestamp at capture
+            Dict: dictionary of pointcloud points, rotation matrix, position, and timestamp at capture
         """
         #first, calculate the pointcloud
-        self.calc_ptcloud()
+        if update:
+            self.calc_ptcloud()
         return self._ptcloudData
+    
+    def get_knn(self, K):
+        """
+        Gets the K Nearest neighbors in the pointcloud to the point and their indices.
+        Args:
+            K (int): number of points to search for
+        Returns:
+            (3xK numpy array): Matrix of closest points in the vehicle frame
+        """
+        #check what's closest to the zero vector - this will give the closest points in the vehicle frame!
+        dist, ind = self.get_pointcloud(update = True)["kd"].query(np.zeros((1, 3)), K)
+        
+        #extract list
+        if ind.shape != (1, ):
+            ind = ind[0]
+        
+        #convert indices to a matrix of the points
+        closest_K = np.zeros((3, K))
+        for i in range(K):
+            index = ind[i] #extract the ith index from the optimal index list
+            closest_K[:, i] = (self._ptcloudData["ptcloud"])[:, index]
+        
+        #return the matrix
+        return closest_K

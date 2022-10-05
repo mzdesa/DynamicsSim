@@ -46,7 +46,7 @@ ADD YOUR LYAPUNOV FUNCTIONS HERE
 """
 
 class DoubleIntLyapunov(LyapunovBarrier):
-    def __init__(self, stateDimn, inputDimn, dynamics, observer):
+    def __init__(self, stateDimn, inputDimn, dynamics, observer, trajectory):
         """
         Double integrator system Lyapunov function.
         Args:
@@ -54,38 +54,29 @@ class DoubleIntLyapunov(LyapunovBarrier):
             inputDimn (int): length of input vector
             dynamics (Dynamics): Dynamics object
             observer (Observer): Observer object
+            trajectory (Trajectory): traj object
         """
         super().__init__(stateDimn, inputDimn, dynamics)
         self._goal_pt = None
         self.observer = observer
+        self.trajectory = trajectory
         
-    def set_goal_pt(self, pt):
-        """
-        Function to update the goal point of the system
-
-        Args:
-            pt (3 x 1 numpy array): new point to be used for a lyapunov function, (x, y, z) position
-        """
-        self._goal_pt = pt
+        #tuning parameter
+        self.EPSILON = 1
     
-    def get_goal_pt(self):
-        """
-        Retreive the lyapunov goal point from the class attribute
-        """
-        return self._barrierPt
-    
-    def eval(self, u):
-        #get goal point
-        x_g = self.get_goal_pt()
+    def eval(self, u, t):
+        #get goal point, velocity, acceleration
+        xG, vG, aG = self.trajectory.get_state(t)
         
         #first, get the spatial and velocity vectors from the observer
         x = self.observer.get_pos()
         v = self.observer.get_vel()
         
         #evaluate lyapunov function
-        v = (0.5*((x-x_g).T@(x-x_g)) + 0.5*((v-goal_vel).T@(v-goal_vel))+epsilon*((x-x_g).T@(v-goal_vel)))[0, 0]
-        vDot = ...
-        vDDot = ...
+        v = (0.5*((x-xG).T@(x-xG)) + 0.5*((v-vG).T@(v-vG))+self.EPSILON*((x-xG).T@(v-vG)))[0, 0]
+        vDot = 0 #TODO: Implement these derivatives
+        vDDot = 0
+        self._vals = [vDDot, vDot, v]
         return self._vals
     
 """
@@ -95,7 +86,7 @@ ADD YOUR BARRIER FUNCTIONS HERE
 """
 
 class PointBarrier(LyapunovBarrier):
-    def __init__(self, stateDimn, inputDimn, dynamics, observer):
+    def __init__(self, stateDimn, inputDimn, dynamics, observer, buffer):
         """
         Double integrator system Lyapunov function.
         Args:
@@ -106,7 +97,7 @@ class PointBarrier(LyapunovBarrier):
         """
         super().__init__(stateDimn, inputDimn, dynamics)
         self._barrierPt = None
-        self._buffer = 0.1 #barrier buffer
+        self._buffer = buffer #barrier buffer
         self.observer = observer #store the system observer
         
     def set_barrier_pt(self, pt):
