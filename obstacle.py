@@ -76,15 +76,31 @@ class ObstacleQueue:
     
     def depth_to_spatial(self, ptMatrix):
         """
-        NOTE: THIS IS WHAT STUDENTS SHOULD IMPLEMENT
         Converts a matrix of points from the vehicle frame to the spatial frame.
         Args:
             ptMatrix (stateDimn x QueueSize numpy array): matrix where each column is a point in the vehicle frame
         Returns:
             (stateDimn x QueueSize numpy array): ptMatrix, where each column has been converted into the spatial frame
         """
+        #extract some relevant state information
+        R_sc = self.observer.get_orient() #rotation matrix from the car frame to the world frame. (3x3) NumPy Array
+        carPos = self.observer.get_pos() #position of the car in the world frame, (3x1) NumPy Array
+        carVel = self.observer.get_vel() #velocity of the car in the world frame, (3x1) NumPy Array
+        
+        #*****************************************************************************************
+        #YOUR CODE HERE:
+        #In this function, we want to figure out how to convert an entire matrix of points
+        #in the car frame into the world frame. We pass in ptMatrix, a matrix of depth camera
+        #readings in the car frame. Each column in the matrix is one point that's read by the
+        #depth camera. We want to figure out how to transform each column of this matrix into the 
+        #world frame. There are several approaches to this problem - try to acheieve this using as 
+        #few operations as possible to make the simulator run faster. You can even acheive this in 
+        #a single line of code! Hint: look at the np.tile() function.
+        #*****************************************************************************************
+        
         #convert the matrix back into the world frame
-        return self.observer.get_orient()@ptMatrix + np.tile(self.observer.get_pos(), (1, self.queueSize))
+        transformedPoints = ptMatrix #PLACEHOLDER VALUE. YOU SHOULD REPLACE THIS
+        return transformedPoints
         
     def update_queue(self):
         """

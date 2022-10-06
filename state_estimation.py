@@ -66,21 +66,18 @@ class DoubleIntObserver(StateObserver):
         Returns:
             R (3x3 numpy array): rotation matrix from double integrator "car" frame into base frame
         """
-        #first column is the unity vector in direction of velocity. Note that this is already noisy.
-        r1 = self.get_vel()
-        if(np.linalg.norm(r1) != 0):
-            #do not re-call the get_vel() function as it is stochastic
-            r1 = r1/np.linalg.norm(r1) 
-        else:
-            #set the r1 direction to be e1 if velocity is zero
-            r1 = self.e1
-            
-        #calculate angle of rotation WRT x-axis
-        theta = np.arccos(r1[0, 0])
-        r2 = np.array([[-np.sin(theta), np.cos(theta), 0]]).T
+        #extract the position and velocity of the vehicle in the world frame
+        carPos = self.get_pos() #position of the car in the world frame, (3x1) NumPy array
+        carVel = self.get_vel() #velocity of the car in the world frame, (3x1) NumPy array
         
-        #assemble the rotation matrix, normalize the second column, set r3 = e3
-        return np.hstack((r1, r2/np.linalg.norm(r2), self.e3))
+        #**************************************************************************************
+        #TODO: YOUR CODE HERE
+        #Our car has position and velocity readings, but has no explicit orientation readings.
+        #In this question, we want to solve for the Rotation matrix from the car frame into the 
+        #world frame using just the position and velocity of the car.
+        #**************************************************************************************
+        R_sc = np.eye(3) #PLACEHOLDER VALUE. Replace this!
+        return R_sc
     
 class DepthCam:
     def __init__(self, circle, observer, mean = None, sd = None):
@@ -148,9 +145,9 @@ class DepthCam:
             self.calc_ptcloud()
         return self._ptcloudData
     
-    def get_knn(self, K):
+    def get_knn_scipy(self, K):
         """
-        Gets the K Nearest neighbors in the pointcloud to the point and their indices.
+        Gets the K Nearest neighbors in the pointcloud to the point. Uses the SCIPY cKD tree.
         Args:
             K (int): number of points to search for
         Returns:
@@ -170,4 +167,32 @@ class DepthCam:
             closest_K[:, i] = (self._ptcloudData["ptcloud"])[:, index]
         
         #return the matrix
+        return closest_K
+    
+    def get_knn(self, K):
+        """
+        Gets the K Nearest neighbors in the pointcloud to the point. Uses a numpy implementation, written by you :)
+        Args:
+            K (int): number of points in the pointcloud to search for. Assume K <= Number of points in the pointcloud.
+        Returns:
+            (3xK numpy array): Matrix of closest points in the VEHICLE frame. Each column is a point.
+        """
+        #retrieve the pointcloud data
+        #ptcloud will be a 3xN numpy array, containing points in space sensed by the depth camera
+        ptcloud = self._ptcloudData["ptcloud"]
+        
+        #retrieve the current state of the vehicle in the vehicle frame
+        xVehicle = np.zeros((3, 1)) #Since the pointcloud is in the vehicle frame, we use (0, 0, 0) to represent the position of the vehicle.
+        
+        #*************************************************************************************
+        #TODO: YOUR CODE HERE: 
+        #WRITE A FUNCTION TO SEARCH FOR THE K NEAREST POINTS IN THE POINTCLOUD
+        #Your function must be written from scratch using numpy. Note that there are no constraints
+        #on how fast your code should be. As long as it works, you're all good to go, although
+        #we encourage you to make it as efficient as possible to get the most out of this exercise.
+        #The two variables provided above are the pointcloud of the vehicle and the position of the
+        #vehicle in the vehicle frame (this is the zero vector). Since the depth
+        #camera is attached to the vehicle, this pointcloud is in the vehicle frame.
+        #*************************************************************************************
+        closest_K = self.get_knn_scipy(K) #Placeholder value to ensure the code runs. You should put your implementation here!
         return closest_K
