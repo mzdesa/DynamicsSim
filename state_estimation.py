@@ -179,7 +179,7 @@ class DepthCam:
         """
         #retrieve the pointcloud data
         #ptcloud will be a 3xN numpy array, containing points in space sensed by the depth camera
-        ptcloud = self._ptcloudData["ptcloud"]
+        ptcloud = self.get_pointcloud(update = True)["ptcloud"]
         
         #retrieve the current state of the vehicle in the vehicle frame
         xVehicle = np.zeros((3, 1)) #Since the pointcloud is in the vehicle frame, we use (0, 0, 0) to represent the position of the vehicle.
