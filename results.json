@@ -1,0 +1,29 @@
+{
+    "score": 100.0,
+    "output": "WHOOO ALL TEST CASES PASSED 🥳🥳🥳",
+    "visibility": "visible",
+    "stdout_visibility": "visible",
+    "tests": [
+        {
+            "score": 33.333333333333336,
+            "max_score": 33.333333333333336,
+            "name": "get_orient test",
+            "output": "Correct implementation of get_orient.",
+            "visibility": "visible"
+        },
+        {
+            "score": 33.333333333333336,
+            "max_score": 33.333333333333336,
+            "name": "depth_to_spatial test",
+            "output": "Correct implementation of depth_to_spatial.",
+            "visibility": "visible"
+        },
+        {
+            "score": 33.333333333333336,
+            "max_score": 33.333333333333336,
+            "name": "pointcloud test",
+            "output": "Correct implementation of get_knn.",
+            "visibility": "visible"
+        }
+    ]
+}
