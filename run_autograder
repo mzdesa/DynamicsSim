@@ -1,0 +1,18 @@
+#!/usr/bin/env bash                                                             
+
+# Set up autograder files                                                       
+
+cp /autograder/submission/controller.py /autograder/source/
+cp /autograder/submission/dynamics.py /autograder/source/
+cp /autograder/submission/environment.py /autograder/source/
+cp /autograder/submission/lyapunov_barrier.py /autograder/source/
+cp /autograder/submission/obstacle.py /autograder/source/
+cp /autograder/submission/run_simulation.py /autograder/source/
+cp /autograder/submission/state_estimation.py /autograder/source/
+cp /autograder/submission/trajectory.py /autograder/source/
+
+
+cd /autograder/source
+
+python3 grader.py
+mv results.json /autograder/results/
