@@ -83,8 +83,19 @@ class ObstacleQueue:
         Returns:
             (stateDimn x QueueSize numpy array): ptMatrix, where each column has been converted into the spatial frame
         """
+        
+        #Test Julia's solution
         #convert the matrix back into the world frame
+        # carPos = self.observer.get_pos()
+        # R_sc = self.observer.get_orient()
+        # Translation = np.tile(carPos, (1, ptMatrix.shape[1]))
+        # Rx = np.matmul(R_sc, ptMatrix)
+        # transformedPoints = Rx + Translation #PLACEHOLDER VALUE. YOU SHOULD REPLACE THIS
+        # print("Julia's soln")
+        # print(transformedPoints.shape)
+        # print("Our soln:")
         return self.observer.get_orient()@ptMatrix + np.tile(self.observer.get_pos(), (1, self.queueSize))
+        
         
     def update_queue(self):
         """

@@ -14,8 +14,8 @@ x0 = np.array([[0, 0, 0, 0.5, 0, 0]]).T
 dynamics = DoubleIntDyn(x0)
 
 #create an observer based on the dynamics object with noise parameters
-mean = 0
-sd = 0.01
+mean = None #0
+sd =None # 0.01
 observer = DoubleIntObserver(dynamics, mean, sd)
 
 #create a circular obstacle

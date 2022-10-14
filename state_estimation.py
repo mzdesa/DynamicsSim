@@ -66,7 +66,8 @@ class DoubleIntObserver(StateObserver):
         Returns:
             R (3x3 numpy array): rotation matrix from double integrator "car" frame into base frame
         """
-        #first column is the unity vector in direction of velocity. Note that this is already noisy.
+        #Our Solution:
+        # first column is the unity vector in direction of velocity. Note that this is already noisy.
         r1 = self.get_vel()
         if(np.linalg.norm(r1) != 0):
             #do not re-call the get_vel() function as it is stochastic
@@ -79,8 +80,40 @@ class DoubleIntObserver(StateObserver):
         theta = np.arccos(r1[0, 0])
         r2 = np.array([[-np.sin(theta), np.cos(theta), 0]]).T
         
-        #assemble the rotation matrix, normalize the second column, set r3 = e3
-        return np.hstack((r1, r2/np.linalg.norm(r2), self.e3))
+        #assemble the rotation matrix, normalize the second column, set r3 = e3   
+        Rsoln = np.hstack((r1, r2/np.linalg.norm(r2), self.e3))
+        
+        # print("Our Solution: ")
+        # print(Rsoln)
+        
+        #Alternate solution using the cross product:
+        # r1 = self.get_vel()
+        # if(np.linalg.norm(r1) != 0):
+        #     #do not re-call the get vel() function as it is stochastic
+        #     r1 = r1/np.linalg.norm(r1) 
+        # else:
+        #     #set the r1 direction to be e1 if velocity is zero
+        #     r1 = self.e1
+        # #solve for the second vector
+        # r2 = np.cross(r1.reshape((3, )), np.array([0, 0, 1]))
+        # r2 = -r2/np.linalg.norm(r2)
+        
+        #Julia's Solution
+        carVel = self.get_vel()
+        if (np.linalg.norm(carVel) != 0):
+            norm = np.linalg.norm(carVel)
+            col1 = carVel/norm
+            col3 = np.array([[0], [0], [1]]).T
+            col2 = np.cross(col3.reshape((3, )), col1.reshape((3, ))).reshape((3,1))
+            R_sc = np.concatenate((col1, col2, col3.T), axis = 1) #PLACEHOLDER VALUE. Replace this!
+        else:
+            R_sc = np.array([[1, 0, 0],
+                                [0, 1, 0],
+                                [0, 0, 1]])
+        # print("Julia Soln: ")
+        # print(R_sc)
+        # print("*********************")
+        return Rsoln
     
 class DepthCam:
     def __init__(self, circle, observer, mean = None, sd = None):
@@ -156,7 +189,7 @@ class DepthCam:
         Returns:
             (3xK numpy array): Matrix of closest points in the vehicle frame
         """
-        #check what's closest to the zero vector - this will give the closest points in the vehicle frame!
+        # check what's closest to the zero vector - this will give the closest points in the vehicle frame!
         dist, ind = self.get_pointcloud(update = True)["kd"].query(np.zeros((1, 3)), K)
         
         #extract list
@@ -171,3 +204,13 @@ class DepthCam:
         
         #return the matrix
         return closest_K
+
+        # #JULIA's SOLN:
+        # ptcloud = self.get_pointcloud(update = True)["ptcloud"]
+        # copy_ptcloud = ptcloud
+        # index_list = np.argsort(np.linalg.norm(copy_ptcloud, axis = 0))
+        # closest_K = []
+        # for i in range(0, K+1):
+        #     closest_K.append(copy_ptcloud[:, index_list[i]])
+        # print(closest_K)
+        # return closest_K
