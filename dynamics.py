@@ -76,196 +76,61 @@ class Dynamics:
         """
         pass
     
-    
 """
 **********************************
 PLACE YOUR DYNAMICS FUNCTIONS HERE
 **********************************
 """
-class DoubleIntDyn(Dynamics):
-    def __init__(self, x0 = np.zeros((6, 1)), stateDimn = 6, inputDimn = 3, relDegree = 2):
+class QuadDyn(Dynamics):
+    def __init__(self, x0 = np.zeros((8, 1)), stateDimn = 8, inputDimn = 2, relDegree = 2, m = 0.5, Ixx = 1, l = 0.15):
         """
-        Init function for a Planar double integrator system.
-        Inputs are Fx and Fy (no Fz)
-
+        Init function for a Planar quadrotor system.
+        State Vector: X = [x, y, z, theta, x_dot, y_dot, z_dot, theta_dot]
+        Input Vector: U = [F, M]
+        
         Args:
-            x0 (_type_): _description_ (x, y, z, x_dot, y_dot, z_dot)
-            stateDimn (_type_): _description_
-            inputDimn (_type_): _description_
-            relDegree (int, optional): _description_. Defaults to 2.
+            x0 ((8 x 1) NumPy Array): initial state (x, y, z, theta, x_dot, y_dot, z_dot, theta_dot)
+            stateDimn (int): dimension of state vector
+            inputDimn (int): dimension of input vector
+            relDegree (int, optional): relative degree of system
+            m (float): mass of quadrotor in kg
+            Ixx (float): moment of inertia about x axis of quadrotor
+            l (float): length of one arm of quadrotor
         """
         super().__init__(x0, stateDimn, inputDimn, relDegree)
         
-        #store the linear system dynamics matrices
-        self._A = np.hstack((np.zeros((6, 3)), np.vstack((np.eye(3), np.zeros((3, 3))))))
-        self._B = np.vstack((np.zeros((3, 3)), np.eye(3)))
+        #store physical parameters
+        self._m = m
+        self._Ixx = Ixx
+        self._g = 9.81
+        self._l = l
     
-    def deriv(self, x, u, t):
+    def deriv(self, X, U, t):
         """
         Returns the derivative of the state vector
         Args:
-            x (6 x 1 numpy array): current state vector at time t
-            u (2 x 1 numpy array): current input vector at time t
+            X (8 x 1 numpy array): current state vector at time t
+            U (2 x 1 numpy array): current input vector at time t
             t (float): current time with respect to simulation start
         Returns:
             xDot: state_dimn x 1 derivative of the state vector
         """
-        return self._A@x + self._B@u
+        #unpack the input vector
+        F, M = U[0, 0], U[1, 0]
         
-    def get_state_spatial(self):
-        """
-        Returns the purely spatial (X, Y, Z) component of the state vector
-
-        Returns:
-            (2x1 numpy array): (x, y, z) position of the system
-        """
-        return self.get_state()[0:3].reshape((3, 1))
-    
-    def get_state_velocity(self):
-        """
-        Returns the velocity component (X_dot, Y_dot, Z_dot) of the state vector
-
-        Returns:
-            (2x1 numpy array): (x_dot, y_dot) velocity of the system
-        """
-        return self.get_state()[2:].reshape((2, 1))
-    
-    def get_rotation_matrix(self):
-        """
-        Returns the rotation matrix from the car frame to the spatial frame.
-        """
-        #use the velocity to get the first component.
+        #unpack the state vector
+        x, y, z = X[0, 0], X[1, 0], X[2, 0] #positions
+        x_dot, y_dot, z_dot = X[4, 0], X[5, 0], X[6, 0] #velocities
+        theta, theta_dot = X[3, 0], X[7, 0] #orientations
         
-    def show_animation(self, xData, uData, tData, animate = True):
-        """
-        Shows the animation and visualization of data for this system.
-        Args:
-            xData (stateDimn x N Numpy array): state vector history array
-            u (inputDimn x N numpy array): input vector history array
-            t (1 x N numpy array): time history
-            animate (bool, optional): Whether to generate animation or not. Defaults to True.
-        """
-        #Set constant animtion parameters
-        GOAL_POS = [10, 10]
-        OBS_POS = [5, 6]
-        OBS_R = 1.5
-        FREQ = 50 #control frequency, same as data update frequency
+        #calculate the second time derivatives of each
+        x_ddot = 0
+        y_ddot = (-np.sin(theta)*F)/self._m
+        z_ddot = (np.cos(theta)*F - self._m*self._g)/self._m
+        theta_ddot = M/self._Ixx
         
-        if animate:
-            fig, ax = plt.subplots()
-            # set the axes limits
-            ax.axis([0, GOAL_POS[0]+2.5, 0, GOAL_POS[1]+2.5])
-            # set equal aspect such that the circle is not shown as ellipse
-            ax.set_aspect("equal")
-            # create a point in the axes
-            point, = ax.plot(0,1, marker="o")
-            num_frames = xData.shape[1]-1
-
-            #plot the obstacle
-            circle = plt.Circle((OBS_POS[0], OBS_POS[1]), radius = OBS_R, fc = 'c')
-            plt.gca().add_patch(circle)
-            ax.scatter([GOAL_POS[0]], [GOAL_POS[1]], color = 'y') #goal position
-                
-            def animate(i):
-                x = xData[0, i]
-                y = xData[1, i]
-                point.set_data(x, y)
-                return point,
-            
-            anim = animation.FuncAnimation(fig, animate, frames=num_frames, interval=1/FREQ*1000, blit=True)
-            plt.xlabel("X Position (m)")
-            plt.ylabel("Y Position (m)")
-            plt.title("Position of Car in Space")
-            plt.show()
-
-        #Plot the spatial trajectory of the car
-        fig, ax = plt.subplots()
-        ax.set_aspect("equal")
-        xCoords = xData[0, :].tolist() #extract all of the velocity data to plot on the y axis
-        yCoords = xData[1, :].tolist()
-        ax.plot(xCoords, yCoords)
-        ax.scatter([GOAL_POS[0]], [GOAL_POS[1]], color = 'y') #goal position
-        circle = plt.Circle((OBS_POS[0], OBS_POS[1]), radius = OBS_R, fc = 'c')
-        plt.gca().add_patch(circle)
-        plt.xlabel("X Position (m)")
-        plt.ylabel("Y Position (m)")
-        plt.title("Position of Car in Space")
-        plt.show()
-        
-        #Plot each state variable in time
-        fig, axs = plt.subplots(6)
-        fig.suptitle('Evolution of States and Inputs in Time')
-        xlabel = 'Time (s)'
-        ylabels = ['X Pos (m)', 'Y Pos (m)', 'X Vel (m/s)', 'Y Vel (m/s)', 'uX (N)', 'uY (N)']
-        indices = [0, 1, 3, 4] #skip the z coordinates - indices in the state vector to plot
-        n = 0 #index in the subplot
-        #plot the states
-        for i in indices:
-            axs[n].plot(tData.reshape((tData.shape[1], )).tolist(), xData[i, :].tolist())
-            axs[n].set(ylabel=ylabels[n]) #pull labels from the list above
-            axs[n].grid()
-            n += 1
-        #plot the inputs
-        for i in range(2):
-            axs[i+4].plot(tData.reshape((tData.shape[1], )).tolist(), uData[i, :].tolist())
-            axs[i+4].set(ylabel=ylabels[i+4])
-            axs[i+4].grid()
-        axs[5].set(xlabel = xlabel)
-        plt.show()
-        
-class GeorgeDyn(Dynamics):
-    def __init__(self, x0 = np.zeros((6, 1)), stateDimn = 6, inputDimn = 3, relDegree = 2):
-        """
-        Init function for a George system.
-        Inputs are inputs are T1L T1R T2L T2R
-
-        Args:
-            x0 (_type_): _description_ (x, y, z, x_dot, y_dot, z_dot)
-            stateDimn (_type_): _description_
-            inputDimn (_type_): _description_
-            relDegree (int, optional): _description_. Defaults to 2.
-        """
-        super().__init__(x0, stateDimn, inputDimn, relDegree)
-        
-        #store the linear system dynamics matrices
-        self._A = np.hstack((np.zeros((6, 3)), np.vstack((np.eye(3), np.zeros((3, 3))))))
-        self._B = np.vstack((np.zeros((3, 3)), np.eye(3)))
-    
-    def deriv(self, x, u, t):
-        """
-        Returns the derivative of the state vector
-        Args:
-            x (6 x 1 numpy array): current state vector at time t
-            u (2 x 1 numpy array): current input vector at time t
-            t (float): current time with respect to simulation start
-        Returns:
-            xDot: state_dimn x 1 derivative of the state vector
-        """
-        return self._A@x + self._B@u
-        
-    def get_state_spatial(self):
-        """
-        Returns the purely spatial (X, Y, Z) component of the state vector
-
-        Returns:
-            (2x1 numpy array): (x, y, z) position of the system
-        """
-        return self.get_state()[0:3].reshape((3, 1))
-    
-    def get_state_velocity(self):
-        """
-        Returns the velocity component (X_dot, Y_dot, Z_dot) of the state vector
-
-        Returns:
-            (2x1 numpy array): (x_dot, y_dot) velocity of the system
-        """
-        return self.get_state()[2:].reshape((2, 1))
-    
-    def get_rotation_matrix(self):
-        """
-        Returns the rotation matrix from the car frame to the spatial frame.
-        """
-        #use the velocity to get the first component.
+        #construct and return state vector        
+        return np.array([[x_dot, y_dot, z_dot, theta_dot, x_ddot, y_ddot, z_ddot, theta_ddot]]).T
         
     def show_animation(self, xData, uData, tData, animate = True):
         """

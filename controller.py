@@ -1,6 +1,4 @@
 import numpy as np
-import casadi as ca
-from collections import deque
 
 """
 File containing controllers 
@@ -10,7 +8,6 @@ class Controller:
         """
         Skeleton class for feedback controllers
         Args:
-            dynamics (Dynamics): system Dynamics object
             observer (Observer): state observer object
             lyapunov (LyapunovBarrier): lyapunov functions, LyapunovBarrier object
             trajectory (Trajectory): trajectory for the controller to track (could just be a constant point!)
@@ -45,11 +42,12 @@ class Controller:
             self._u: most recent input stored in class paramter
         """
         return self._u
-
-class CLF_CBF_QP(Controller):
-    def __init__(self, observer, lyapunov, trajectory, obstacleQueue, uBounds = None):
+    
+class PlanarQrotorPD:
+    def __init__(self, observer, lyapunov = None, trajectory = None, obstacleQueue = None, uBounds = None):
         """
-        Skeleton class for feedback controllers
+        Init function for a planar quadrotor controller.
+
         Args:
             observer (Observer): state observer object
             lyapunov (LyapunovBarrier): lyapunov functions, LyapunovBarrier object
@@ -57,233 +55,150 @@ class CLF_CBF_QP(Controller):
             obstacleQueue (ObstacleQueue): ObstacleQueue object, stores all barriers for the system to avoid
             uBounds ((Dynamics.inputDimn x 2) numpy array): minimum and maximum input values to the system
         """
-        super().__init__(observer, lyapunov, trajectory, obstacleQueue, uBounds)
+        super.__init__(observer, lyapunov, trajectory, obstacleQueue, uBounds)
         
-        #store controller parameters
-        self._useCBF = True
-        self._useCLF = True
-        self._useOptiSmoothing = False
+        #Initialize variables for the gain parameters
+        self.Kp = np.eye(3) #proportional position gain
+        self.Kd = np.eye(3) #derivative position gain
+        self.Ktheta = 1 #proportional orientation gain
+        self.Komega = 1 #derivative orientation gain
         
-        #store optimization tuning parameters - number of CBF tuning constants equal the relative degree + 1
-        self._cbfAlphas = np.ones((1, self.observer.dynamics.relDegree+1))
-        self._clfGammas = np.ones((1, self.observer.dynamics.relDegree+1))
+        #Store quadrotor parameters from the observer
+        self.m = self.observer.dynamics._m
+        self.Ixx = self.observer.dynamics._Ixx
+        self.g = 9.81 #store gravitational constant
         
-    def set_params(self, useCBF, useCLF, useOptiSmoothing, cbfAlphas, clfGammas):
+        #store Euclidean basis vector
+        self.e1 = np.array([[1, 0, 0]]).T
+        self.e2 = np.array([[0, 1, 0]]).T
+        self.e3 = np.array([[0, 0, 1]]).T
+        
+    def set_params(self, Kp, Kd, Ktheta, Komega):
         """
-        Set the parameters for the controller
+        Function to set controller gain parameters
         Args:
-            useCBF (_type_): use the CBF constraint in the optimization
-            useCLF (_type_): use the CLF constraint in the optimization
-            useOptiSmoothing (_type_): use previous input smoothing in the optimization
-            cbfAlphas ((1, self.Dynamics.relDegre + 1) numpy Array): Matrix of CBF tuning constaints in descending order of derivative
-            clfGammas ((1, self.Dynamics.relDegre + 1) numpy Array): Array of CLF tuning constaints in descending order of derivative
+            Kp ((3x3) numpy array): proportional gain
+            Kd ((3x3) numpy array): derivative gain
+            Ktheta (float): proportional orientation gain
+            Komega (flota): derivative orientation gain
         """
-        #store optimization "On/Off switches"
-        self._useCBF = useCBF
-        self._useCLF = useCLF
-        self._useOptiSmoothing = useOptiSmoothing
-        
-        #store optimization tuning parameters - number of CBF tuning constants equal the relative degree + 1
-        self._cbfAlphas = cbfAlphas
-        self._clfGammas = clfGammas
-        
-    def get_input(self):
+        self.Kp = Kp
+        self.Kd = Kd
+        self.Ktheta = Ktheta
+        self.Komega = Komega
+    
+    def get_position_error(self, t):
         """
-        Retrieve the input from the class parameter
-        """
-        return self._u
-        
-    def eval_input(self, t):
-        """
-        Solve for and return control input using CBF CLF QP
+        Function to return the position error vector x_d - x_q
         Args:
             t (float): current time in simulation
         Returns:
-            u ((Dynamics.inputDimn x 1)): input vector, as determined by controller
+            eX ((3 x 1) NumPy array): x_d - x_q based on current quadrotor state
         """
-        #extract state vector from observer
-        x = self.observer.get_state()
+        #retrieve desired and current positions
+        xD = self.trajectory.pos(t)
+        xQ = self.observer.get_pos()
         
-        #set up Casadi optimization
-        opti = ca.Opti()
-        
-        #set up optimization variables
-        u = opti.variable(self.input_dimn, 1)
-        delta = opti.variable()
-            
-        #Enforce CLF constraint
-        if self._useCLF:
-            #Apply matrix multiplication to evaluate the constraint
-            opti.subject_to((self._clfGammas @ self.lyapunov.eval(u, t))[0, 0] <= delta)
-
-        #Enforce CBF constraint
-        if self._useCBF:
-            #First update the barrier queue - will get the latest KNN in the queue or update barrier points
-            self.obstacleQueue.update_queue()
-            
-            #iterate through the list of CBFs
-            for cbf in self.obstacleQueue.barriers:
-                #Apply matrix multiplication to evaluate the constraint - extract each row of tuning constants
-                opti.subject_to((self._cbfAlphas @ cbf.eval(u, t))[0, 0] >= 0)
-
-        #Define Cost Function
-        H = np.eye(self.input_dimn)
-        cost = ca.mtimes(u.T, ca.mtimes(H, u)) + self.p*delta**2
-
-        #set up optimization problem
-        opti.minimize(cost)
-        option = {"verbose": False, "ipopt.print_level": 0, "print_time": 0}
-        opti.solver("ipopt", option)
-
-        #solve optimization
-        try:
-            sol = opti.solve()
-            uOpt = sol.value(u) #extract optimal input
-            solverFailed = False
-        except:
-            print("Solver failed!")
-            solverFailed = True
-            uOpt = np.zeros((self.input_dimn, 1))
-        
-        #store output in class param
-        self._u = uOpt.reshape((self.input_dimn, 1))
-        
-        #return result
-        return self._u, solverFailed
+        #return difference
+        return xD - xQ
     
-class CBF_QP(Controller):
-    """
-    Class for a CBF-QP Controller. Requires a nominal controller to be passed in.
-    """
-    def __init__(self, observer, trajectory, refController, obstacleQueue, uBounds = None):
+    def get_velocity_error(self, t):
         """
-        Initialize a CBF QP controller
-        Args:
-            observer (Observer): state Observer object
-            trajectory (Trajectory): trajectory for the controller to track (could just be a constant point!)
-            obstacleQueue (ObstacleQueue): ObstacleQueue object, stores all barriers for the system to avoid
-            refController (Controller): reference controller for use in CBF QP control
-            uBounds ((Dynamics.inputDimn x 2) numpy array): minimum and maximum input values to the system
-        """
-        #run the super class init
-        super().__init__(observer, None, trajectory, obstacleQueue, uBounds)        
-        
-        #store controller parameters
-        self.refController = refController
-        self._useCBF = True
-        self._useOptiSmoothing = False
-        
-        #store optimization tuning parameters - number of CBF tuning constants equal the relative degree + 1
-        self._cbfAlphas = np.ones((1, self.observer.dynamics.relDegree+1))
-        
-    def set_params(self, useCBF, useOptiSmoothing, cbfAlphas):
-        """
-        Set the parameters for the controller
-        Args:
-            useCBF (_type_): use the CBF constraint in the optimization
-            useOptiSmoothing (_type_): use previous input smoothing in the optimization
-            cbfAlphas ((1, self.Dynamics.relDegre + 1) numpy Array): Matrix of CBF tuning constaints in descending order of derivative
-        """
-        #store optimization "On/Off switches"
-        self._useCBF = useCBF
-        self._useOptiSmoothing = useOptiSmoothing
-        
-        #store optimization tuning parameters - number of CBF tuning constants equal the relative degree + 1
-        self._cbfAlphas = cbfAlphas
-    
-    def eval_input(self, t):
-        """
-        Solve for and return control input using CBF QP
+        Function to return velocity error vector v_d - v_q
         Args:
             t (float): current time in simulation
         Returns:
-            u ((Dynamics.inputDimn x 1)): input vector, as determined by controller
+            eX ((3 x 1) NumPY array): vD - vQ
         """
-        #extract state vector from observer
-        x = self.observer.get_state()
+        #retrieve desired and current velocities
+        vD = self.trajectory.vel(t)
+        vQ = self.observer.get_vel()
         
-        #set up Casadi optimization
-        opti = ca.Opti()
-        
-        #set up optimization variables
-        u = opti.variable(self.observer.inputDimn, 1)
-        
-        #Solve for reference control input
-        uRef = self.refController.eval_input(t)
-
-        #Enforce CBF constraint
-        if self._useCBF:
-            #First update the barrier queue
-            self.obstacleQueue.update_queue()
-            
-            #iterate through the list of CBFs
-            for cbf in self.obstacleQueue.barriers:
-                #Compute barrier constraint for arbitrary relative degree
-                barrierDerivs = cbf.eval(u, t) #gets a list of CBF derivatives
-                constr = 0
-                for i in range(self.observer.dynamics.relDegree + 1):
-                    constr += self._cbfAlphas[0, i]*barrierDerivs[i]
-                opti.subject_to(constr >= 0)
-
-        #Define Cost Function
-        H = np.eye(self.observer.inputDimn)
-        cost = ca.mtimes((u-uRef).T, ca.mtimes(H, (u-uRef)))
-
-        #set up optimization problem
-        opti.minimize(cost)
-        option = {"verbose": False, "ipopt.print_level": 0, "print_time": 0}
-        opti.solver("ipopt", option)
-
-        #solve optimization
-        try:
-            sol = opti.solve()
-            uOpt = sol.value(u) #extract optimal input
-            solverFailed = False
-        except:
-            print("Solver failed!")
-            solverFailed = True
-            uOpt = np.zeros((self.observer.inputDimn, 1))
-
-        #store input in class param
-        self._u = uOpt.reshape((self.observer.inputDimn, 1))
-        
-        #return result
-        return self._u, solverFailed
+        #return difference
+        return vD - vQ
     
-class StateFB(Controller):
-    def __init__(self, observer, trajectory):
+    def eval_force_vec(self, t):
         """
-        Initialize a state feedback controller
-        """
-        #initialize the super class
-        super().__init__(observer, lyapunov = None, trajectory = trajectory, obstacleQueue = None, uBounds = None)
-                
-        #store controller gain matrix
-        self.K = None 
-        
-    def set_params(self, K):
-        """
-        Set the parameters for the controller
+        Function to evaluate the force vector input to the system using point mass dynamics.
         Args:
-            K ((Dynamics.InputDimn x Dynamics.StateDimn) numpy array): gain matrix for state feedback
-        """
-        self.K = K
-    
-    def eval_input(self, t):
-        """
-        Solve for and return control input using state feedback
-        Args:
-            x ((Dynamics.stateDimn x 1) NumPy array): current state vector
             t (float): current time in simulation
         Returns:
-            u ((Dynamics.inputDimn x 1)): input vector, as determined by controller
+            f ((3 x 1) NumPy Array): virtual force vector to be tracked by the orientation controller
         """
-        #first call the goal position and velocity
-        xG, vG, aG = self.trajectory.get_state(t)
-        xG = np.vstack((xG, vG)) #reform the goal state vector
+        #find position and velocity error
+        eX = self.get_position_error(t)
+        eV = self.get_velocity_error(t)
         
-        #get the current state vector
-        x = self.observer.get_state()
+        #get desired acceleration from trajectory
+        aD = self.trajectory.accel(t)
         
-        self._u = self.K@(xG - x)
-        return self._u
+        #calculate control input - add feedforward acceleration term
+        return self.Kp@eX + self.Kd@eV + self.m*self.g*self.e3 + self.m*aD
+    
+    def eval_desired_orient(self, t, f):
+        """
+        Function to evaluate the desired orientation of the system.
+        Args:
+            t (float): current time in simulation
+            f ((3 x 1) NumPy array): force vector to track from point mass dynamics
+        Returns:
+            thetaD (float): desired angle of quadrotor WRT world frame
+        """
+        return np.atan2(f[2, 0], f[1, 0])
+    
+    def eval_orient_error(self, t):
+        """
+        Evalute the orientation error of the system thetaD - thetaQ
+        Args:
+            t (float): current time in simulation
+        Returns:
+            eOmega (float): error in orientation angle
+        """
+        f = self.eval_force(t)
+        thetaD = self.eval_desired_orient(t, f)
+        thetaQ = self.observer.get_orient()
+        
+        #return the difference
+        return thetaD - thetaQ
+    
+    def eval_moment(self, t):
+        """
+        Function to evaluate the moment input to the system
+        Args:
+            t (float): current time in simulation
+        Returns:
+            M (float): moment input to quadrotor
+        """
+        eTheta = self.eval_orient_error(t)
+        eOmega = 0 - self.observer.get_omega() #assume zero angular velocity desired
+        
+        #return the PD controller output - assume zero desired angular acceleration
+        return self.Ktheta*eTheta + self.Komega*eOmega + self.Ixx*0
+    
+    def eval_force_scalar(self, t):
+        """
+        Evaluates the scalar force input to the system.
+        Args:
+            t (float): current time in simulation
+        Returns:
+            F (float): scalar force input from PD control
+        """
+        #first, construct R, a rotation matrix about the x axis
+        thetaQ = self.observer.get_orient()
+        R = np.array([[np.cos(thetaQ), 0, np.sin(thetaQ)], 
+                      [0, 1, 0], 
+                      [-np.sin(thetaQ), 0, np.cos(thetaQ)]])
+        
+        #find and return the scalar force
+        return self.eval_force_vec(t).T@R@self.e3
+        
+    def get_input(self, t):
+        """
+        Get the control input F, M to the planar quadrotor system
+        Args:
+            t (float): current time in simulation
+        Returns:
+            F (float): scalar force input to system
+            M (float): scalar moment input to system
+        """
+        return self.eval_force_scalar(t), self.eval_moment(t)

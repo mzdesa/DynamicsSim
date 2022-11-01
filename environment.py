@@ -23,7 +23,6 @@ class Environment:
         self.x = self.dynamics.get_state() #Actual state of the system
         self.x0 = self.x #store initial condition for use in reset
         self.xObsv = None #state as read by the observer
-        self.ptCloud = None #point cloud state as read by vision
         
         #Define simulation parameters
         self.SIM_FREQ = 1000 #integration frequency in Hz
