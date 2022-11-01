@@ -122,7 +122,9 @@ class Environment:
         for i in range(N):
             self.reset()
             while not self._is_done():
-                print("Simulation Time Remaining: ", self.TOTAL_SIM_TIME - self.t)
+                if (self.TOTAL_SIM_TIME - self.t) % 0.25 == 0:
+                    #print out remaining time in quarter second increments
+                    print("Simulation Time Remaining: ", self.TOTAL_SIM_TIME - self.t)
                 self.step() #step the environment while not done
             self.visualize() #render the result
             
