@@ -82,7 +82,7 @@ PLACE YOUR DYNAMICS FUNCTIONS HERE
 **********************************
 """
 class QuadDyn(Dynamics):
-    def __init__(self, x0 = np.zeros((8, 1)), stateDimn = 8, inputDimn = 2, relDegree = 2, m = 0.5, Ixx = 1, l = 0.15):
+    def __init__(self, x0 = np.zeros((8, 1)), stateDimn = 8, inputDimn = 2, relDegree = 2, m = 0.92, Ixx = 0.0023, l = 0.15):
         """
         Init function for a Planar quadrotor system.
         State Vector: X = [x, y, z, theta, x_dot, y_dot, z_dot, theta_dot]
@@ -117,9 +117,9 @@ class QuadDyn(Dynamics):
         """
         #unpack the input vector
         F, M = U[0, 0], U[1, 0]
+        F = max(0, F) #CUT OFF THE FORCE AT ZERO!
         
         #unpack the state vector
-        x, y, z = X[0, 0], X[1, 0], X[2, 0] #positions
         x_dot, y_dot, z_dot = X[4, 0], X[5, 0], X[6, 0] #velocities
         theta, theta_dot = X[3, 0], X[7, 0] #orientations
         
@@ -142,69 +142,75 @@ class QuadDyn(Dynamics):
             animate (bool, optional): Whether to generate animation or not. Defaults to True.
         """
         #Set constant animtion parameters
-        GOAL_POS = [10, 10]
-        OBS_POS = [5, 6]
-        OBS_R = 1.5
+        GOAL_POS = [1, 2]
         FREQ = 50 #control frequency, same as data update frequency
+        L = 0.14 #quadrotor arm length
         
         if animate:
             fig, ax = plt.subplots()
             # set the axes limits
-            ax.axis([0, GOAL_POS[0]+2.5, 0, GOAL_POS[1]+2.5])
+            ax.axis([-1, 2.5, 0, 2.5])
             # set equal aspect such that the circle is not shown as ellipse
             ax.set_aspect("equal")
             # create a point in the axes
             point, = ax.plot(0,1, marker="o")
             num_frames = xData.shape[1]-1
 
-            #plot the obstacle
-            circle = plt.Circle((OBS_POS[0], OBS_POS[1]), radius = OBS_R, fc = 'c')
-            plt.gca().add_patch(circle)
-            ax.scatter([GOAL_POS[0]], [GOAL_POS[1]], color = 'y') #goal position
+            #define the line for the quadrotor
+            line, = ax.plot([], [], 'o-', lw=2)
+            
+            #plot the goal position
+            ax.scatter([GOAL_POS[0]], [GOAL_POS[1]], color = 'y')
                 
             def animate(i):
-                x = xData[0, i]
                 y = xData[1, i]
-                point.set_data(x, y)
-                return point,
+                z = xData[2, i]
+                point.set_data(y, z)
+                
+                #draw the quadrotor line body
+                theta = xData[3, i]
+                x1 = y + L*np.cos(theta)
+                x2 = y - L*np.cos(theta)
+                y1 = z + L*np.sin(theta)
+                y2 = z - L*np.sin(theta)
+                thisx = [x1, x2]
+                thisy = [y1, y2]
+                line.set_data(thisx, thisy)
+                
+                return line, point
             
             anim = animation.FuncAnimation(fig, animate, frames=num_frames, interval=1/FREQ*1000, blit=True)
-            plt.xlabel("X Position (m)")
-            plt.ylabel("Y Position (m)")
-            plt.title("Position of Car in Space")
+            plt.xlabel("Y Position (m)")
+            plt.ylabel("Z Position (m)")
+            plt.title("Position of Drone in Space")
             plt.show()
-
-        #Plot the spatial trajectory of the car
-        fig, ax = plt.subplots()
-        ax.set_aspect("equal")
-        xCoords = xData[0, :].tolist() #extract all of the velocity data to plot on the y axis
-        yCoords = xData[1, :].tolist()
-        ax.plot(xCoords, yCoords)
-        ax.scatter([GOAL_POS[0]], [GOAL_POS[1]], color = 'y') #goal position
-        circle = plt.Circle((OBS_POS[0], OBS_POS[1]), radius = OBS_R, fc = 'c')
-        plt.gca().add_patch(circle)
-        plt.xlabel("X Position (m)")
-        plt.ylabel("Y Position (m)")
-        plt.title("Position of Car in Space")
-        plt.show()
-        
+            
         #Plot each state variable in time
         fig, axs = plt.subplots(6)
-        fig.suptitle('Evolution of States and Inputs in Time')
+        fig.suptitle('Evolution of States in Time')
         xlabel = 'Time (s)'
-        ylabels = ['X Pos (m)', 'Y Pos (m)', 'X Vel (m/s)', 'Y Vel (m/s)', 'uX (N)', 'uY (N)']
-        indices = [0, 1, 3, 4] #skip the z coordinates - indices in the state vector to plot
+        ylabels = ['Y Pos (m)', 'Z Pos (m)', 'Theta (rad)', 'Y Vel (m/s)', 'Z Vel (m/s)', 'Angular Vel (rad/s)']
+        indices = [1, 2, 3, 5, 6, 7] #skip the x coordinates - indices in the state vector to plot
+        goalStates = [0, 1, 2, 0, 0, 0, 0, 0]
         n = 0 #index in the subplot
         #plot the states
         for i in indices:
             axs[n].plot(tData.reshape((tData.shape[1], )).tolist(), xData[i, :].tolist())
+            #plot the goal state for each
+            axs[n].plot(tData.reshape((tData.shape[1], )).tolist(), [goalStates[i]]*tData.shape[1], 'r:')
             axs[n].set(ylabel=ylabels[n]) #pull labels from the list above
             axs[n].grid()
             n += 1
-        #plot the inputs
-        for i in range(2):
-            axs[i+4].plot(tData.reshape((tData.shape[1], )).tolist(), uData[i, :].tolist())
-            axs[i+4].set(ylabel=ylabels[i+4])
-            axs[i+4].grid()
         axs[5].set(xlabel = xlabel)
+        plt.show()
+        #plot the inputs in a new plot
+        fig, axs = plt.subplots(2)
+        fig.suptitle('Evolution of Inputs in Time')
+        xlabel = 'Time (s)'
+        ylabels = ['Force (N)', 'Moment (N*m)']
+        for i in range(2):
+            axs[i].plot(tData.reshape((tData.shape[1], )).tolist(), uData[i, :].tolist())
+            axs[i].set(ylabel=ylabels[i])
+            axs[i].grid()
+        axs[1].set(xlabel = xlabel)
         plt.show()

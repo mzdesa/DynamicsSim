@@ -48,7 +48,7 @@ class QuadObserver(StateObserver):
     
     def get_vel(self):
         """
-        Returns a potentially noisy measurement of JUST the velocity of the Qrotor mass center
+        Returns a potentially noisy measurement of JUST the spatial velocity of the Qrotor mass center
         Returns:
             3x1 numpy array, observed velocity vector of system
         """
@@ -65,7 +65,7 @@ class QuadObserver(StateObserver):
     
     def get_omega(self):
         """
-        Returns a potentially noisy measurement of the 
+        Returns a potentially noisy measurement of the angular velocity theta dot
         Assumes that the system is planar and just rotates about the X axis.
         Returns:
             theta (float): orientation angle of quadrotor with respect to world frame

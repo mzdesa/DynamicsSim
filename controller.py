@@ -43,7 +43,7 @@ class Controller:
         """
         return self._u
     
-class PlanarQrotorPD:
+class PlanarQrotorPD(Controller):
     def __init__(self, observer, lyapunov = None, trajectory = None, obstacleQueue = None, uBounds = None):
         """
         Init function for a planar quadrotor controller.
@@ -55,7 +55,7 @@ class PlanarQrotorPD:
             obstacleQueue (ObstacleQueue): ObstacleQueue object, stores all barriers for the system to avoid
             uBounds ((Dynamics.inputDimn x 2) numpy array): minimum and maximum input values to the system
         """
-        super.__init__(observer, lyapunov, trajectory, obstacleQueue, uBounds)
+        super().__init__(observer, lyapunov = lyapunov, trajectory = trajectory, obstacleQueue = obstacleQueue, uBounds = uBounds)
         
         #Initialize variables for the gain parameters
         self.Kp = np.eye(3) #proportional position gain
@@ -72,20 +72,6 @@ class PlanarQrotorPD:
         self.e1 = np.array([[1, 0, 0]]).T
         self.e2 = np.array([[0, 1, 0]]).T
         self.e3 = np.array([[0, 0, 1]]).T
-        
-    def set_params(self, Kp, Kd, Ktheta, Komega):
-        """
-        Function to set controller gain parameters
-        Args:
-            Kp ((3x3) numpy array): proportional gain
-            Kd ((3x3) numpy array): derivative gain
-            Ktheta (float): proportional orientation gain
-            Komega (flota): derivative orientation gain
-        """
-        self.Kp = Kp
-        self.Kd = Kd
-        self.Ktheta = Ktheta
-        self.Komega = Komega
     
     def get_position_error(self, t):
         """
@@ -132,19 +118,22 @@ class PlanarQrotorPD:
         #get desired acceleration from trajectory
         aD = self.trajectory.accel(t)
         
+        #DEFINE YOUR P AND D GAINS
+        self.Kp = np.eye(3)*4
+        self.Kd = np.eye(3)*3
+        
         #calculate control input - add feedforward acceleration term
         return self.Kp@eX + self.Kd@eV + self.m*self.g*self.e3 + self.m*aD
     
-    def eval_desired_orient(self, t, f):
+    def eval_desired_orient(self, f):
         """
         Function to evaluate the desired orientation of the system.
         Args:
-            t (float): current time in simulation
             f ((3 x 1) NumPy array): force vector to track from point mass dynamics
         Returns:
             thetaD (float): desired angle of quadrotor WRT world frame
         """
-        return np.atan2(f[2, 0], f[1, 0])
+        return np.arctan2(-f[1, 0], f[2, 0]) #remember to flip the sign!
     
     def eval_orient_error(self, t):
         """
@@ -154,9 +143,9 @@ class PlanarQrotorPD:
         Returns:
             eOmega (float): error in orientation angle
         """
-        f = self.eval_force(t)
-        thetaD = self.eval_desired_orient(t, f)
-        thetaQ = self.observer.get_orient()
+        f = self.eval_force_vec(t) #force we'd like to track
+        thetaD = self.eval_desired_orient(f) #desired angle of quadrotor
+        thetaQ = self.observer.get_orient() #current angle of quadrotor
         
         #return the difference
         return thetaD - thetaQ
@@ -171,9 +160,14 @@ class PlanarQrotorPD:
         """
         eTheta = self.eval_orient_error(t)
         eOmega = 0 - self.observer.get_omega() #assume zero angular velocity desired
+        thetaDDotD = 0 #Assume a desired theta dddot of 0
+        
+        #DEFINE YOUR THETA AND OMEGA GAINS
+        self.Ktheta = 0.08
+        self.Komega = 0.02
         
         #return the PD controller output - assume zero desired angular acceleration
-        return self.Ktheta*eTheta + self.Komega*eOmega + self.Ixx*0
+        return self.Ktheta*eTheta + self.Komega*eOmega + self.Ixx*thetaDDotD
     
     def eval_force_scalar(self, t):
         """
@@ -185,20 +179,21 @@ class PlanarQrotorPD:
         """
         #first, construct R, a rotation matrix about the x axis
         thetaQ = self.observer.get_orient()
-        R = np.array([[np.cos(thetaQ), 0, np.sin(thetaQ)], 
-                      [0, 1, 0], 
-                      [-np.sin(thetaQ), 0, np.cos(thetaQ)]])
+        R = np.array([[1, 0, 0], 
+                      [0, np.cos(thetaQ), -np.sin(thetaQ)], 
+                      [0, np.sin(thetaQ), np.cos(thetaQ)]])
         
         #find and return the scalar force
-        return self.eval_force_vec(t).T@R@self.e3
+        return (self.eval_force_vec(t).T@R@self.e3)[0, 0]
         
-    def get_input(self, t):
+    def eval_input(self, t):
         """
         Get the control input F, M to the planar quadrotor system
         Args:
             t (float): current time in simulation
         Returns:
-            F (float): scalar force input to system
-            M (float): scalar moment input to system
+            self._u = [F, M] ((2x1) numpy array): force, moment input to system
         """
-        return self.eval_force_scalar(t), self.eval_moment(t)
+        #store input in the class parameter
+        self._u = np.array([[self.eval_force_scalar(t), self.eval_moment(t)]]).T
+        return self._u

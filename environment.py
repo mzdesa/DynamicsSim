@@ -28,7 +28,7 @@ class Environment:
         self.SIM_FREQ = 1000 #integration frequency in Hz
         self.CONTROL_FREQ = 50 #control frequency in Hz
         self.SIMS_PER_STEP = self.SIM_FREQ//self.CONTROL_FREQ
-        self.TOTAL_SIM_TIME = 12 #total simulation time in s
+        self.TOTAL_SIM_TIME = 10 #total simulation time in s
         
         #Define history arrays
         self.xHist = np.zeros((self.dynamics.stateDimn, self.TOTAL_SIM_TIME*self.CONTROL_FREQ))
@@ -122,9 +122,7 @@ class Environment:
         for i in range(N):
             self.reset()
             while not self._is_done():
-                if (self.TOTAL_SIM_TIME - self.t) % 0.25 == 0:
-                    #print out remaining time in quarter second increments
-                    print("Simulation Time Remaining: ", self.TOTAL_SIM_TIME - self.t)
+                print("Simulation Time Remaining: ", self.TOTAL_SIM_TIME - self.t)
                 self.step() #step the environment while not done
             self.visualize() #render the result
             
