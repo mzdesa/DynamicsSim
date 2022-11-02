@@ -114,16 +114,30 @@ class PlanarQrotorPD(Controller):
         #find position and velocity error
         eX = self.get_position_error(t)
         eV = self.get_velocity_error(t)
-        
         #get desired acceleration from trajectory
         aD = self.trajectory.accel(t)
         
-        #DEFINE YOUR P AND D GAINS
-        self.Kp = np.eye(3)*4
-        self.Kd = np.eye(3)*3
+        #extract physical properties
+        m = self.m
+        Ixx = self.Ixx
+        g = self.g
         
-        #calculate control input - add feedforward acceleration term
-        return self.Kp@eX + self.Kd@eV + self.m*self.g*self.e3 + self.m*aD
+        """
+        **************************************************************************************************
+        YOUR CODE HERE:
+        Define proportional and derivative gains and compute the force vector needed for position tracking.
+        You should return a (3x1) Numpy array of the force vector needed!
+        Above, the position error, velocity error, and desired acceleration have been calculated for you!
+        Furthermore, all of the physical properties of the quadrotor you'll need have been extracted above.
+        **************************************************************************************************
+        """
+        #DEFINE YOUR P AND D GAINS - TODO
+        self.Kp = ...
+        self.Kd = ...
+        
+        #calculate the 3x1 numpy array force vector - TODO
+        f = ...
+        return f
     
     def eval_desired_orient(self, f):
         """
@@ -133,7 +147,16 @@ class PlanarQrotorPD(Controller):
         Returns:
             thetaD (float): desired angle of quadrotor WRT world frame
         """
-        return np.arctan2(-f[1, 0], f[2, 0]) #remember to flip the sign!
+        
+        """
+        **************************************************************************************************
+        YOUR CODE HERE:
+        In this function, you should implement the desired orientation function, which takes in a force
+        vector f from position tracking and computes the desired angle of orientation, thetaD.
+        **************************************************************************************************
+        """
+        thetaD = 0 #TODO: REPLACE THIS
+        return thetaD
     
     def eval_orient_error(self, t):
         """
@@ -158,16 +181,33 @@ class PlanarQrotorPD(Controller):
         Returns:
             M (float): moment input to quadrotor
         """
+        #Evaluate errors and desired states
         eTheta = self.eval_orient_error(t)
         eOmega = 0 - self.observer.get_omega() #assume zero angular velocity desired
         thetaDDotD = 0 #Assume a desired theta dddot of 0
         
-        #DEFINE YOUR THETA AND OMEGA GAINS
-        self.Ktheta = 0.08
-        self.Komega = 0.02
+        #extract physical properties
+        m = self.m
+        Ixx = self.Ixx
+        g = self.g
         
-        #return the PD controller output - assume zero desired angular acceleration
-        return self.Ktheta*eTheta + self.Komega*eOmega + self.Ixx*thetaDDotD
+        """
+        **************************************************************************************************
+        YOUR CODE HERE:
+        Define angular and angular velocity gains and compute the moment vector needed for orientation tracking.
+        You should return float, M, of the moment vector needed!
+        Above, the angular error, angular velocity error, and desired angular acceleration have been calculated for you!
+        Furthermore, all of the physical properties of the quadrotor you'll need have been extracted above.
+        **************************************************************************************************
+        """
+        
+        #DEFINE YOUR THETA AND OMEGA GAINS - TODO
+        self.Ktheta = ... 
+        self.Komega = ...
+        
+        #return the PD controller output - TODO
+        M = 0
+        return M
     
     def eval_force_scalar(self, t):
         """
