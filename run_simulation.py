@@ -27,7 +27,7 @@ trajectory = Trajectory(start, end, T)
 lyap = LyapunovQrotor(6, 3, observer, trajectory)
 
 #define CLF gamma
-gamma = 1
+gamma = 0 #TODO: YOU SHOULD TUNE THIS VALUE HERE TO ENSURE SMOOTH TRAJECTORY TRACKING
 
 #create a planar quadrotor controller
 controller = PlanarQrotorLyapunov(observer, lyapunov = lyap, trajectory = trajectory, clfGamma = gamma)

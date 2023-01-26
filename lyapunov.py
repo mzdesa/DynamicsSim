@@ -117,14 +117,25 @@ class LyapunovQrotor(Lyapunov):
         eX = x - xD
         eV = v - vD
 
-        #calculate the value of the Lyapunov function
-        return 0.5*self.m*(np.linalg.norm(eV)**2) + 0.5*self.alpha*np.linalg.norm(eX)**2 + self.epsilon*(eX.T@eV)[0]
+        #extract alpha, epsilon, and mass
+        alpha = self.alpha
+        epsilon = self.epsilon
+        m = self.m
 
-    def evalLyapunovDerivs(self, u, t):
+        """
+        ***************************************
+        YOUR CODE HERE: Here, you should calculate and return the value of the Lyapunov function, V(x)
+        Above, several useful parameters have been defined for you! Your code should return a single float value.
+        ***************************************
+        """
+
+        return 0 #TODO: Change this to return the value of the Lyapunov function.
+
+    def evalLyapunovDerivs(self, f, t):
         """
         Evaluates the first derivative of the Lyapunov function at time t.
         Args:
-            u ((inputDimn x 1) numPy array): input to the system
+            f ((inputDimn x 1) numPy array): input to the system
             t (float): current time in simulation
         Returns:
             Vdot(x, t) (float): first time derivative of Lyapunov function at time t, state x
@@ -140,5 +151,17 @@ class LyapunovQrotor(Lyapunov):
         eX = x - xD
         eV = v - vD
 
+        #extract alpha, epsilon, and mass
+        alpha = self.alpha
+        epsilon = self.epsilon
+        m = self.m
+
+        """
+        ***************************************
+        YOUR CODE HERE: Here, you should calculate and return the value of the first time derivative of the Lyapunov function
+        Above, several useful parameters have been defined for you! Your code should return a single float value.
+        ***************************************
+        """
+
         #calculate derivative of Lyapunov function
-        return (u/self.m - aD).T@(self.m*eV + self.epsilon*eX) + self.alpha*eV.T@eX + self.epsilon*eV.T@eV
+        return 0 #TODO: update this line
