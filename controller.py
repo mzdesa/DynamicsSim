@@ -1,4 +1,5 @@
 import numpy as np
+import casadi as ca
 
 """
 File containing controllers 
@@ -196,4 +197,65 @@ class PlanarQrotorPD(Controller):
         """
         #store input in the class parameter
         self._u = np.array([[self.eval_force_scalar(t), self.eval_moment(t)]]).T
+        return self._u
+
+
+class PlanarQrotorLyapunov(PlanarQrotorPD):
+    """
+    Class for a CLF-QP tracking controller, inherits from PlanarQrotorPD
+    """
+    def __init__(self, observer, lyapunov = None, trajectory = None, obstacleQueue = None, uBounds = None, clfGamma = 0.1):
+        """
+        Init function for a planar quadrotor CLF-QP tracking controller.
+        Inherits from PD class, and uses PD orientation contorl, ES-CLF-QP tracking control
+        Inputs:
+            clfGamma (float): constant for ES-CLF rate of convergence
+        """
+        super().__init__(observer, lyapunov = lyapunov, trajectory = trajectory, obstacleQueue = obstacleQueue, uBounds = uBounds)
+        self.clfGamma = clfGamma
+
+    def eval_force_vec(self, t):
+        """
+        Evaluates the force vector input to the system at time t
+        Args:
+            t (float): current time in simulation
+        Returns:
+            f ((3 x 1) NumPy Array): virtual force vector to be tracked by the orientation controller
+        """
+        #set up optimization problem
+        opti = ca.Opti()
+        
+        #set up optimization variables
+        u = opti.variable(3, 1) #the input here is a force vector only! Will be 3D.
+            
+        #get the CLF value and its derivative
+        V = self.lyapunov.evalLyapunov(t)
+        VDot = self.lyapunov.evalLyapunovDerivs(u, t) #pass the input into the function
+
+        #Apply CLF constraint to problem
+        opti.subject_to(VDot <= -self.clfGamma*V)
+
+        #Define Cost Function
+        H = np.eye(3)
+        cost = ca.mtimes(u.T, ca.mtimes(H, u))
+
+        #set up optimization problem
+        opti.minimize(cost)
+        option = {"verbose": False, "ipopt.print_level": 0, "print_time": 0}
+        opti.solver("ipopt", option)
+
+        #solve optimization
+        try:
+            sol = opti.solve()
+            uOpt = sol.value(u) #extract optimal input
+            solverFailed = False
+        except:
+            print("Solver failed!")
+            solverFailed = True
+            uOpt = np.zeros((3, 1)) #return a zero vector
+        
+        #store output in class param - add on the effect of gravit here!
+        self._u = uOpt.reshape((3, 1)) + self.m*self.g*self.e3
+
+        #return result
         return self._u

@@ -21,7 +21,7 @@ class StateObserver:
         """
         Returns a potentially noisy observation of the system state
         """
-        if self.mean and self.sd:
+        if self.mean or self.sd:
             #return an observation of the vector with noise
             return self.dynamics.get_state() + np.random.normal(self.mean, self.sd, (self.stateDimn, 1))
         return self.dynamics.get_state()

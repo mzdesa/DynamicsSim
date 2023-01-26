@@ -4,6 +4,7 @@ from dynamics import *
 from controller import *
 from trajectory import *
 from state_estimation import *
+from lyapunov import *
 
 #system initial condition
 x0 = np.array([[0, 0, 1, 0, 0, 0, 0, 0]]).T #start the quadrotor at 1 M in the air
@@ -22,8 +23,14 @@ end = np.array([[0, 1, 2]]).T #goal state in space
 T = 3 #Period of trajectory
 trajectory = Trajectory(start, end, T)
 
+#create a lyapunov function for a 3D particle with a force vector input
+lyap = LyapunovQrotor(6, 3, observer, trajectory)
+
+#define CLF gamma
+gamma = 1
+
 #create a planar quadrotor controller
-controller = PlanarQrotorPD(observer, lyapunov = None, trajectory = trajectory)
+controller = PlanarQrotorLyapunov(observer, lyapunov = lyap, trajectory = trajectory, clfGamma = gamma)
 
 #create a simulation environment
 env = Environment(dynamics, controller, observer)
