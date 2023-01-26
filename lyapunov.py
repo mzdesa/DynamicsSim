@@ -126,6 +126,7 @@ class LyapunovQrotor(Lyapunov):
         ***************************************
         YOUR CODE HERE: Here, you should calculate and return the value of the Lyapunov function, V(x)
         Above, several useful parameters have been defined for you! Your code should return a single float value.
+        NOTE: Do not use np.matmul for multiplication, use the @ symbol. To find the square of the norm of a vector, use x.T @ x.
         ***************************************
         """
 
@@ -138,7 +139,7 @@ class LyapunovQrotor(Lyapunov):
             f ((inputDimn x 1) numPy array): input to the system
             t (float): current time in simulation
         Returns:
-            Vdot(x, t) (float): first time derivative of Lyapunov function at time t, state x
+            Vdot(x, t): first time derivative of Lyapunov function at time t, state x
         """
         #get the position and velocity from the observer
         x = self.observer.get_pos()
@@ -160,6 +161,7 @@ class LyapunovQrotor(Lyapunov):
         ***************************************
         YOUR CODE HERE: Here, you should calculate and return the value of the first time derivative of the Lyapunov function
         Above, several useful parameters have been defined for you! Your code should return a single float value.
+        NOTE: Do not use np.matmul for multiplication, use the @ symbol. To find the square of the norm of a vector, use x.T @ x.
         ***************************************
         """
 
