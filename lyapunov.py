@@ -120,7 +120,7 @@ class LyapunovQrotor(Lyapunov):
         #calculate the value of the Lyapunov function
         return 0.5*self.m*(np.linalg.norm(eV)**2) + 0.5*self.alpha*np.linalg.norm(eX)**2 + self.epsilon*(eX.T@eV)[0]
 
-    def evalLyapunovDerivs(self, u, t):
+    def evalLyapunovDerivs(self, f, t):
         """
         Evaluates the first derivative of the Lyapunov function at time t.
         Args:
@@ -141,4 +141,4 @@ class LyapunovQrotor(Lyapunov):
         eV = v - vD
 
         #calculate derivative of Lyapunov function
-        return (u/self.m - aD).T@(self.m*eV + self.epsilon*eX) + self.alpha*eV.T@eX + self.epsilon*eV.T@eV
+        return (f/self.m - aD).T@(self.m*eV + self.epsilon*eX) + self.alpha*eV.T@eX + self.epsilon*eV.T@eV
