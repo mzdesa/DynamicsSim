@@ -146,7 +146,7 @@ class DoubleIntDyn(Dynamics):
             animate (bool, optional): Whether to generate animation or not. Defaults to True.
         """
         #Set constant animtion parameters
-        GOAL_POS = [10, 10]
+        GOAL_POS = [9, 9]
         OBS_POS = [5, 6]
         OBS_R = 1.5
         FREQ = 50 #control frequency, same as data update frequency
@@ -211,4 +211,108 @@ class DoubleIntDyn(Dynamics):
             axs[i+4].set(ylabel=ylabels[i+4])
             axs[i+4].grid()
         axs[5].set(xlabel = xlabel)
+        plt.show()
+
+
+class TurtlebotDyn(Dynamics):
+    def __init__(self, x0 = np.zeros((3, 1)), stateDimn = 3, inputDimn = 2, relDegree = 1):
+        """
+        Init function for a turtlebot system. Inputs are v, omega.
+
+        Args:
+            x0 (NumPy Array): (x, y, phi)
+            stateDimn (Int): 
+            inputDimn (Int): 
+            relDegree (Int, optional): Defaults to 2.
+        """
+        super().__init__(x0, stateDimn, inputDimn, relDegree)
+
+    def deriv(self, x, u, t):
+        """
+        Returns the derivative of the state vector
+        Args:
+            x (3 x 1 numpy array): current state vector at time t
+            u (2 x 1 numpy array): current input vector at time t
+            t (float): current time with respect to simulation start
+        Returns:
+            xDot: state_dimn x 1 derivative of the state vector
+        """
+        PHI = x[2, 0]
+        return np.array([[np.cos(PHI), 0], [np.sin(PHI), 0], [0, 1]])@u
+
+    def show_animation(self, xData, uData, tData, animate = True):
+        """
+        Shows the animation and visualization of data for this system.
+        Args:
+            xData (stateDimn x N Numpy array): state vector history array
+            u (inputDimn x N numpy array): input vector history array
+            t (1 x N numpy array): time history
+            animate (bool, optional): Whether to generate animation or not. Defaults to True.
+        """
+        #Set constant animtion parameters
+        GOAL_POS = [4, 4]
+        OBS_POS = [2, 2.5]
+        OBS_R = 0.75
+        FREQ = 50 #control frequency, same as data update frequency
+        
+        if animate:
+            fig, ax = plt.subplots()
+            # set the axes limits
+            ax.axis([0, GOAL_POS[0]+2.5, 0, GOAL_POS[1]+2.5])
+            # set equal aspect such that the circle is not shown as ellipse
+            ax.set_aspect("equal")
+            # create a point in the axes
+            point, = ax.plot(0,1, marker="o")
+            num_frames = xData.shape[1]-1
+
+            #plot the obstacle
+            circle = plt.Circle((OBS_POS[0], OBS_POS[1]), radius = OBS_R, fc = 'c')
+            plt.gca().add_patch(circle)
+            ax.scatter([GOAL_POS[0]], [GOAL_POS[1]], color = 'y') #goal position
+                
+            def animate(i):
+                x = xData[0, i]
+                y = xData[1, i]
+                point.set_data(x, y)
+                return point,
+            
+            anim = animation.FuncAnimation(fig, animate, frames=num_frames, interval=1/FREQ*1000, blit=True)
+            plt.xlabel("X Position (m)")
+            plt.ylabel("Y Position (m)")
+            plt.title("Position of Car in Space")
+            plt.show()
+
+        #Plot the spatial trajectory of the car
+        fig, ax = plt.subplots()
+        ax.set_aspect("equal")
+        xCoords = xData[0, :].tolist() #extract all of the velocity data to plot on the y axis
+        yCoords = xData[1, :].tolist() #remove the last point, get artefacting for some reason
+        ax.plot(xCoords[0:-1], yCoords[0:-1])
+        ax.scatter([GOAL_POS[0]], [GOAL_POS[1]], color = 'y') #goal position
+        circle = plt.Circle((OBS_POS[0], OBS_POS[1]), radius = OBS_R, fc = 'c')
+        plt.gca().add_patch(circle)
+        plt.xlabel("X Position (m)")
+        plt.ylabel("Y Position (m)")
+        plt.title("Position of Turtlebot in Space")
+        plt.show()
+        
+        #Plot each state variable in time
+        fig, axs = plt.subplots(5)
+        fig.suptitle('Evolution of States and Inputs in Time')
+        xlabel = 'Time (s)'
+        ylabels = ['X Pos (m)', 'Y Pos (m)', 'Phi (rad)', "V (m/s)", "Omega (rad/s)"]
+        indices = [0, 1, 2]
+        n = 0 #index in the subplot
+        #plot the states
+        for i in indices:
+            axs[n].plot(tData.reshape((tData.shape[1], )).tolist()[0:-1], xData[i, :].tolist()[0:-1])
+            axs[n].set(ylabel=ylabels[n]) #pull labels from the list above
+            axs[n].grid()
+            n += 1
+        #plot the inputs
+        for i in range(2):
+            axs[i+3].plot(tData.reshape((tData.shape[1], )).tolist()[0:-1], uData[i, :].tolist()[0:-1])
+            axs[i+3].set(ylabel=ylabels[i+3])
+            axs[i+3].grid()
+        axs[4].set(xlabel = xlabel)
         plt.show()
