@@ -90,8 +90,19 @@ class TurtlebotMPC:
         X Should be a matrix of dimension (3 x N+1). Each column represents one state in the state sequence.
         U Should be a matrix of dimension (2 x N). Each column represents one input in the input sequence.
         """
-        self.X = self.opti.variable(3, self.N + 1)
-        self.U = self.opti.variable(2, self.N)
+        """
+        ****************************************
+        YOUR CODE HERE:
+        Declare the optimization variables for X and U
+        You can declare an optimization variable with self.opti.variable(shape1, shape2).
+        Here, we store opti in a class variable, which is why we need "self"!
+        ****************************************
+        """
+        N = self.N #MPC horizon
+
+        #TODO: Declare these variables
+        self.X = ...
+        self.U = ...
 
     def add_input_constraint(self):
         """
@@ -100,11 +111,20 @@ class TurtlebotMPC:
         The v and omega inputs should be between [-10 and 10].
         If you add a constraint on two elements in Casadi, it will apply the constraint element-wise!
         """
-        for i in range(self.N):
-            self.opti.subject_to(self.U[:, i] <= np.ones((2, 1))*10)
-            self.opti.subject_to(self.U[:, i] >= np.ones((2, 1))*(-10))
+        """
+        ****************************************
+        YOUR CODE HERE:
+        Constrain the v and omega inputs to be within -10 and 10 at all steps in the input sequence!
+        Enfore the optimization constraint using self.opti.subject_to(...)
+        Hint: Loop over the columns of self.U and apply the constraint to each column by slicing the self.U matrix.
+        Tips:
+        To get the ith column out of the matrix X, you may use self.X[:, i].
+        To ge the ith column out of the matrix U, you may use self.U[:, i].
+        When using matrix multiplication in Casadi, remember to use the @ symbol!
+        ****************************************
+        """
+        N = self.N #MPC horizon
 
-        
 
     def add_obs_constraint(self):
         """
@@ -113,13 +133,27 @@ class TurtlebotMPC:
         obs.get_radius() -> returns the scalar radius of the obstacle
         obs.get_center() -> returns 2x1 NumPy array of center (x, y) position of the obstacle.
         """
-        for obs in self.obstacles:
-            for i in range(self.N + 1):
-                center = obs.get_center()
-                radius = obs.get_radius()
-                #slice out the (x, y) of the ith column and apply the obstacle constraint
-                self.opti.subject_to((self.X[0:2, i] - center).T@(self.X[0:2, i] - center) > radius**2)
+        """
+        ****************************************
+        YOUR CODE HERE:
+        Constrain X such that the path never crosses over the obstacles!
+        Enfore the optimization constraint using self.opti.subject_to(...)
+        Hint: Loop over the columns of self.X and apply the constraint to each column by slicing the self.X matrix.
+        Tips:
+        To get the ith column out of the matrix X, you may use self.X[:, i].
+        To ge the ith column out of the matrix U, you may use self.U[:, i].
+        When using matrix multiplication in Casadi, remember to use the @ symbol!
+        ****************************************
+        """
+        N = self.N #MPC horizon
 
+        for obs in self.obstacles:
+            #center and radius of the obstacle
+            center = obs.get_center()
+            radius = obs.get_radius()
+            #Apply the obstacle constraint to ALL N+1 columns of X
+            #TODO: YOUR CODE HERE
+                
     def discrete_dyn(self, q, u):
         """
         Discretized dynamics of the turtlebot.
@@ -128,48 +162,95 @@ class TurtlebotMPC:
         Returns:
                 q(k+1) = q(k) + dt*f(q(k), u(k)) - state vector at the next discretized time step (casadi vector)
         """
-        return q + ca.vertcat(u[0]*ca.cos(q[2]), u[0]*ca.sin(q[2]), u[1])*self.dt
+        #define q dot
+        q_dot = ca.vertcat(u[0]*ca.cos(q[2]), u[0]*ca.sin(q[2]), u[1])
+        dt = self.dt
+
+        #TODO: YOUR CODE HERE: return q(k+1) using Euler discretization, given q_dot, q(k), and dt.
+        return 0
 
     def add_dyn_constraint(self):
         """
         Enforce the dynamics constraint, xk+1 = f(xk, uk), on each element of the system.
         Enforce the initial condition of the optimization as well.
         """
-        #add initial condition constraint
-        self.opti.subject_to(self.X[:, 0] == self.observer.get_state())
+        N = self.N #MPC horizon
 
-        #add dynamics constraint
-        for i in range(self.N-1):
-            self.opti.subject_to(self.X[:, i+1] == self.discrete_dyn(self.X[:, i], self.U[:, i]))
+        #get initial condition (x, y, phi) vector
+        x0 = self.observer.get_state()
+
+        """
+        ****************************************
+        YOUR CODE HERE:
+        Add the initial condition constraint and the dynamics constraint to all of the entries in X.
+        Hint: to apply the dynamics constraint, loop over all of the elements X, and use the function discrete_dyn 
+        to get the next step for each x_k, u_k pair.
+        Tips:
+        To get the ith column out of the matrix X, you may use self.X[:, i].
+        To ge the ith column out of the matrix U, you may use self.U[:, i].
+        When using matrix multiplication in Casadi, remember to use the @ symbol!
+        ****************************************
+        """
+
+        #TODO: add initial condition constraint
+        
+
+        #TODO: add dynamics constraint
+        
 
     def add_cost(self):
         """
         Compute the cost for the MPC problem.
         """
-        #First, define P, Q, R matrices
-        P = np.diag((2, 2, 0))
-        Q = np.diag((2, 2, 0))
-        R = np.eye(2)
+        N = self.N #MPC horizon
 
-        termCost = (self.X[:, self.N] - self.x_d).T@P@(self.X[:, self.N] - - self.x_d)
-        sumCost = 0
-        for i in range(self.N):
-            sumCost = sumCost + (self.X[:, i] - self.x_d).T@Q@(self.X[:, i] - self.x_d) + (self.U[:, i]).T@R@(self.U[:, i])
+        #get desired state
+        xd = self.x_d
 
-        # self.cost = termCost + sumCost
-        self.cost = sumCost
+        """
+        YOUR CODE HERE: 
+        You should fill in an expression for self.cost using the cost function for MPC.
+        Hint: To compute the sum term, use a for loop from 0 to N-1. Note that the horizon and desired state
+        have been extracted above!
+        Tips:
+        To get the ith column out of the matrix X, you may use self.X[:, i].
+        To ge the ith column out of the matrix U, you may use self.U[:, i].
+        When using matrix multiplication in Casadi, remember to use the @ symbol!
+        """
+
+        #Define P, Q, R matrices - you may use NumPy matrices for these - start with the Identity and go from there!
+        P = ...
+        Q = ...
+        R = ...
+
+        self.cost = ... #TODO: fill in this parameter!
 
 
     def add_warm_start(self):
         """
         Warm starts the system with a guess of the Geometric PD controller
         """
-        x0 = ((self.observer.get_state())[0:2]).reshape((2, 1))
-        x0 = np.vstack((x0, 0))
-        xG = np.linspace(x0[0, 0], self.x_d[0, 0], self.N+1)
-        yG = np.linspace(x0[1, 0], self.x_d[1, 0], self.N+1)
-        pG = np.linspace(x0[2, 0], self.x_d[2, 0], self.N+1)
-        xGuess = ca.DM(np.vstack((xG, yG, pG))) #linearly interpolate between them
+        #get inital condition (x, y, phi vector)
+        x0 = self.observer.get_state()
+
+        #get desired state
+        xd = self.x_d
+
+        N = self.N #MPC horizon
+        
+        """
+        YOUR CODE HERE: Use NumPy to get a guess, called xGuess, for X, a matrix of N+1 states, whose columns
+        are guesses for the optimal sequence of states that solve the optimiation problem.
+        Your guess can use a linear interpolation between the initial condition and desired state, 
+        which have been extracted above for you. Your solution xGuess should be a numpy array:
+        [x_0, x_1, ..., x_N], whose columns are the different terms in the optimal sequence.
+        Hint: Look at the numpy function linspace.
+        """
+        #TODO: provide a guess of the matrix of optimal states.
+        xGuess = ...
+
+        #Convert to correct Casadi type (do not edit)
+        xGuess = ca.DM(xGuess) 
         self.opti.set_initial(self.X, xGuess)
         
     def setup(self):
