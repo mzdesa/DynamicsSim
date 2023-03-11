@@ -70,3 +70,28 @@ class Trajectory:
             x_d, v_d, a_d: desired position, velocity, and acceleration at time t
         """
         return self.pos(t), self.vel(t), self.accel(t)
+    
+
+class TrajectoryManager:
+    def __init__(self, starts, ends, Ts, N):
+        """
+        Managerial trajectory class for a system of N turtlebots - creates N trajectory objects
+        Inputs:
+            starts (list of NumPy Arrays): list of start positions (NumPy arrays) for each turtlebot
+            ends (list of NumPy Arrays): list of desired goal positions (NumPy arrays) for each turtlebot
+            Ts (list of floats): list of desired times for each trajectory
+            N: number of turtlebots in the system
+        """
+        self.trajDict = {}
+
+        for i in range(N):
+            #create a trajectory
+            self.trajDict[i] = Trajectory(starts[i], ends[i], Ts[i], N)
+
+    def get_traj_i(self, i):
+        """
+        Function to retrieve the ith trajectory object in the system
+        Inputs:
+            i (integer): index of trajectory we want to return
+        """
+        return self.trajDict[i]

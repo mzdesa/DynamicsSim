@@ -26,61 +26,81 @@ class StateObserver:
             return self.dynamics.get_state() + np.random.normal(self.mean, self.sd, (self.stateDimn, 1))
         return self.dynamics.get_state()
     
-class DoubleIntObserver(StateObserver):
+class EgoTurtlebotObserver:
+    def __init__(self, dynamics, mean, sd, index):
+        """
+        Init function for a state observer for a single turtlebot within a system of N turtlebots
+        Args:
+            dynamics (Dynamics): Dynamics object for the entire turtlebot system
+            mean (float): Mean for gaussian noise. Defaults to None.
+            sd (float): standard deviation for gaussian noise. Defaults to None.
+            index (Integer): index of the turtlebot in the system
+        """
+        #initialize the super class
+        super().__init__(dynamics, mean, sd)
+
+        #store the index of the turtlebot
+        self.index = index
+    
+    def get_state(self):
+        """
+        Returns a potentially noisy measurement of the state vector of the ith turtlebot
+        Returns:
+            3x1 numpy array, observed state vector of the ith turtlebot in the system (zero indexed)
+        """
+        return self.get_state()[2*self.index : 2*self.index + 3].reshape((3, 1))
+    
+    def get_vel(self):
+        """
+        Returns a potentially noisy measurement of the derivative of the state vector of the ith turtlebot
+        Inputs:
+            i (int): the index of the desired turtlebot position in the system (zero indexed)
+        Returns:
+            3x1 numpy array, observed derivative of the state vector of the ith turtlebot in the system (zero indexed)
+        """
+        #first, get the current input to the system of turtlebots
+        u = self.dynamics.get_input()
+
+        #now, get the noisy measurement of the entire state vector
+        x = self.get_state()
+
+        #calculate the derivative of the ith state vector using the noisy state measurement
+        xDot = self.dynamics.deriv(x, u, 0) #pass in zero for the time (placeholder for time invar system)
+
+        #slice out the derivative of the ith turtlebot and reshape
+        return xDot[2*self.index : 2*self.index + 3].reshape((3, 1))
+    
+    
+class ObserverManager:
     def __init__(self, dynamics, mean, sd):
         """
-        Init function for state observer
-
+        Managerial class to manage the observers for a system of N turtlebots
         Args:
             dynamics (Dynamics): Dynamics object instance
             mean (float, optional): Mean for gaussian noise. Defaults to None.
             sd (float, optional): standard deviation for gaussian noise. Defaults to None.
         """
-        super().__init__(dynamics, mean, sd)
-        
-        #define standard basis vectors to refer to
-        self.e1 = np.array([[1, 0, 0]]).T
-        self.e2 = np.array([[0, 1, 0]]).T
-        self.e3 = np.array([[0, 0, 1]]).T
-    
-    def get_pos(self):
-        """
-        Returns a potentially noisy measurement of JUST the position of a double integrator
-        Returns:
-            3x1 numpy array, observed position vector of systme
-        """
-        return self.get_state()[0:3].reshape((3, 1))
-    
-    def get_vel(self):
-        """
-        Returns a potentially noisy measurement of JUST the velocity of a double integrator
-        Returns:
-            3x1 numpy array, observed velocity vector of systme
-        """
-        return self.get_state()[3:].reshape((3, 1))
+        #store the input parameters
+        self.dynamics = dynamics
+        self.mean = mean
+        self.sd = sd
 
-    def get_orient(self):
+        #create an observer dictionary storing N observer instances
+        self.observerDict = {}
+
+        #create N observer objects
+        for i in range(self.dynamics.N):
+            #create an observer with index i
+            self.observerDict[i] = EgoTurtlebotObserver(dynamics, mean, sd, i)
+
+    def get_observer_i(self, i):
         """
-        Returns a potentially noisy measurement of JUST the rotation matrix fo a double integrator "car" system.
-        Assumes that the system is planar and just rotates about the z axis.
-        Returns:
-            R (3x3 numpy array): rotation matrix from double integrator "car" frame into base frame
+        Function to retrieve the ith observer object for the turtlebot
+        Inputs:
+            i (integet): index of the turtlebot whose observer we'd like to retrieve
         """
-        #first column is the unity vector in direction of velocity. Note that this is already noisy.
-        r1 = self.get_vel()
-        if(np.linalg.norm(r1) != 0):
-            #do not re-call the get_vel() function as it is stochastic
-            r1 = r1/np.linalg.norm(r1) 
-        else:
-            #set the r1 direction to be e1 if velocity is zero
-            r1 = self.e1
-            
-        #calculate angle of rotation WRT x-axis
-        theta = np.arccos(r1[0, 0])
-        r2 = np.array([[-np.sin(theta), np.cos(theta), 0]]).T
-        
-        #assemble the rotation matrix, normalize the second column, set r3 = e3
-        return np.hstack((r1, r2/np.linalg.norm(r2), self.e3))
+        return self.observerDict[i]
+
     
 class DepthCam:
     def __init__(self, circle, observer, mean = None, sd = None):
