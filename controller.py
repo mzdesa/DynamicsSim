@@ -156,8 +156,8 @@ class TurtlebotMPC:
         for i in range(self.N):
             sumCost = sumCost + (self.X[:, i] - self.x_d).T@Q@(self.X[:, i] - self.x_d) + (self.U[:, i]).T@R@(self.U[:, i])
 
-        # self.cost = termCost + sumCost
-        self.cost = sumCost
+        self.cost = termCost + sumCost
+        # self.cost = sumCost
 
 
     def add_warm_start(self):
