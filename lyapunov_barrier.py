@@ -62,7 +62,7 @@ class TurtlebotBarrier(LyapunovBarrier):
             stateDimn (int): length of (entire) state vector
             inputDimn (int): length of input vector
             dynamics (Dynamics): dynamics object for the entire turtlebot system
-            observer (DoubleIntObserver): observer object for the entire turtlebot system
+            observer (EgoObserver): observer object for a single turtlebot in the system
         """
         super().__init__(stateDimn, inputDimn, dynamics)
         self.iEgo = iEgo
@@ -127,7 +127,7 @@ class BarrierManager:
         self.N = N
 
         #create a barrier function dictionary that stores the N - 1 barriers for each turtlebot
-        self.barriers = {}
+        self.barrierList = {}
 
         #create a set of N - 1 Barrier functions for that turtlebot
         for i in range(self.N):
@@ -140,13 +140,16 @@ class BarrierManager:
             #initialize an empty list to contain the barrier functions for the ego turtlebot
             egoBarrierList = []
 
+            #get the observer corresponding to that turtlebot
+            egoObsvI = self.observerManager.get_observer_i(i)
+
             #loop over the remaining indices and create a barrier function for each obstacle turtlebot
             for j in indexList:
                 #ego index is i, obstacle index is j
-                egoBarrierList.append(TurtlebotBarrier(i, j, stateDimn, inputDimn, dynamics, observer, buffer))
+                egoBarrierList.append(TurtlebotBarrier(i, j, stateDimn, inputDimn, dynamics, egoObsvI, buffer))
 
             #store the ego barrier list in the barrier function dictionary for the robots
-            self.barriers[i] = egoBarrierList
+            self.barrierList[i] = egoBarrierList
 
     def get_barrier_list_i(self, i):
         """
@@ -156,3 +159,4 @@ class BarrierManager:
         Returns:
             barrierList (TurtlebotBarrier List): List of TurtlebotBarrier objects corresponding to turtlebot i
         """
+        return self.barrierList[i]

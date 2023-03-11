@@ -88,7 +88,7 @@ class Dynamics:
 PLACE YOUR DYNAMICS FUNCTIONS HERE
 **********************************
 """
-class NTurtlebotDyn(Dynamics):
+class TurtlebotSysDyn(Dynamics):
     def __init__(self, x0 , stateDimn = 3, inputDimn = 2, relDegree = 1, N = 3, rTurtlebot = 0.3):
         """
         Init function for a system of N turtlebots.

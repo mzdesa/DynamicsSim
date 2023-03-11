@@ -58,18 +58,39 @@ class TurtlebotFBLin:
         self.observer = observer
         self.trajectory = trajectory
 
+    def eval_input(self, t):
+        """
+        Solves for the control input to turtlebot i using a CBF-QP controller.
+        Inputs:
+            t (float): current time in simulation
+            i (int): index of turtlebot in the system we wish to control (zero indexed)
+        """
+        #get the state vector of turtlebot i
+        q = self.observer.get_state()
+
+        #find the input
+        self._u = ...
+    
+    def get_input(self):
+        """
+        Retrieves input stored in class parameter
+        Returns:
+            self._u: most recent input stored in class parameter
+        """
+        return self._u
+
 class TurtlebotCBFQP:
-    def __init__(self, observer, barrier, trajectory):
+    def __init__(self, observer, barriers, trajectory):
         """
         Class for a CBF-QP controller for a single turtlebot within a larger system.
         Args:
             observer (EgoTurtlebotObserver): state observer object for a single turtlebot within the system
-            barrier (List of TurtlebotBarrier): List of TurtlebotBarrier objects corresponding to that turtlebot
+            barriers (List of TurtlebotBarrier): List of TurtlebotBarrier objects corresponding to that turtlebot
             traj (Trajectory): trajectory object
         """
         #store input parameters
         self.observer = observer
-        self.barrier = barrier
+        self.barriers = barriers
         self.trajectory = trajectory
 
         #create a nominal controller
@@ -168,7 +189,8 @@ class ControllerManager(Controller):
         #loop over the system to find the input to each turtlebot
         for i in range(self.N):
             #solve for the latest input to turtlebot i, store the input in the u vector
-            u[2*i : 2*i + 2] = self.controllerDict[i].eval_input(t)
+            self.controllerDict[i].eval_input(t)
+            u[2*i : 2*i + 2] = self.controllerDict[i].get_input()
 
         #store the u vector in self._u
         self._u = u
