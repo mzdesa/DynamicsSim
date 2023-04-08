@@ -77,16 +77,18 @@ class TrajectoryManager:
         """
         Managerial trajectory class for a system of N turtlebots - creates N trajectory objects
         Inputs:
-            starts (list of NumPy Arrays): list of start positions (NumPy arrays) for each turtlebot
-            ends (list of NumPy Arrays): list of desired goal positions (NumPy arrays) for each turtlebot
-            Ts (list of floats): list of desired times for each trajectory
+            starts (NumPy Array): vStacked start positions (NumPy arrays) for each turtlebot
+            ends (NumPy Array): vStacked goal positions (NumPy arrays) for each turtlebot
+            Ts (float): list of desired time for each trajectory
             N: number of turtlebots in the system
         """
         self.trajDict = {}
 
         for i in range(N):
             #create a trajectory
-            self.trajDict[i] = Trajectory(starts[i], ends[i], Ts[i], N)
+            startI = starts[3*i : 3*i + 3].reshape((3, 1))
+            endI = ends[3*i : 3*i+3].reshape((3, 1))
+            self.trajDict[i] = Trajectory(startI, endI, Ts)
 
     def get_traj_i(self, i):
         """

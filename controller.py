@@ -86,6 +86,67 @@ class TurtlebotFBLin:
         self.observer = observer
         self.trajectory = trajectory
 
+        #store the time step dt for integration
+        self.dt = 1/50 #from the control frequency in environment.py
+
+        #store an initial value for the vDot integral
+        self.vDotInt = 0
+
+    def eval_z_input(self, t):
+        """
+        Solve for the input z to the feedback linearized system.
+        Use linear tracking control techniques to accomplish this.
+        """
+        #get the state of turtlebot i
+        q = self.observer.get_state()
+
+        #get the derivative of q of turtlebot i
+        qDot = self.observer.get_vel()
+
+        #get the trajectory states
+        xD, vD, aD = self.trajectory.get_state(t)
+
+        #form the augmented state vector.
+        qPrime = np.array([q[0, 0], q[1, 0], qDot[0, 0], qDot[1, 0]]).T
+
+        #form the augmented desired state vector
+        qPrimeDes = np.array([xD[0, 0], xD[1, 0], vD[0, 0], vD[1, 0]]).T
+
+        #find a control input z to the augmented system
+        k1 = 4 #pick k1, k2 s.t. eddot + k2 edot + k1 e = 0 has stable soln
+        k2 = 4
+        e = np.array([[xD[0, 0], xD[1, 0]]]).T - np.array([[q[0, 0], q[1, 0]]]).T
+        eDot = np.array([[vD[0, 0], vD[1, 0]]]).T - np.array([[qDot[0, 0], qDot[1, 0]]]).T
+        z = aD[0:2].reshape((2, 1)) + k2*eDot + k1 * e
+
+        #return the z input
+        return z
+    
+    def eval_w_input(self, t):
+        """
+        Solve for the w input to the system
+        """
+        #get the current phi
+        phi = self.observer.get_state()[2, 0]
+
+        #get the (xdot, ydot) velocity
+        qDot = self.observer.get_vel()[0:2]
+        v = np.linalg.norm(qDot)
+
+        print(v)
+        #first, eval A(q)
+        Aq = np.array([[np.cos(phi), -v*np.sin(phi)], 
+                       [np.sin(phi), v*np.cos(phi)]])
+        
+        #next, get the z input
+        z = self.eval_z_input(t)
+
+        #invert to get the w input - use pseudoinverse to avoid problems
+        w = np.linalg.pinv(Aq)@z
+
+        #return w input
+        return w
+
     def eval_input(self, t):
         """
         Solves for the control input to turtlebot i using a CBF-QP controller.
@@ -93,11 +154,14 @@ class TurtlebotFBLin:
             t (float): current time in simulation
             i (int): index of turtlebot in the system we wish to control (zero indexed)
         """
-        #get the state vector of turtlebot i
-        q = self.observer.get_state()
+        #get the w input to the system
+        w = self.eval_w_input(t)
 
-        #find the input
-        self._u = ...
+        #integrate the w1 term to get v
+        self.vDotInt += w[0, 0]*self.dt
+
+        #return the [v, omega] input
+        self._u = np.array([[self.vDotInt, w[1, 0]]]).T
     
     def get_input(self):
         """
@@ -202,9 +266,6 @@ class ControllerManager(Controller):
 
                 #get the ith observer object
                 egoObsvI = self.observerManager.get_observer_i(i)
-
-                #get the ith barrier object - May commend this out
-                barrierI = self.barrierManager.get_barrier_list_i(i)
 
                 #create a feedback linearizing controller
                 self.controllerDict[i] = TurtlebotFBLin(egoObsvI, trajI)

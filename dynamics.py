@@ -60,6 +60,11 @@ class Dynamics:
         """
         #integrate starting at x
         self._x = self.get_state() + self.deriv(self.get_state(), u, t)*dt
+
+        #update the input parameter
+        self._u = u
+
+        #return integrated state vector
         return self._x
     
     def get_plots(self, x, u, t):
@@ -103,6 +108,9 @@ class TurtlebotSysDyn(Dynamics):
         self.N = N #store the number of turtlebots in the system
         self.rTurtlebot = rTurtlebot #store the turtlebot radius
         super().__init__(x0, self.N*stateDimn, self.N*inputDimn, relDegree) #scale the input dimn and rel degree by N for all turtlebots
+
+        #set the initial input self._u to be the zero vector (required for FB linearization)
+        self._u = np.zeros((2, 1))
 
     def deriv(self, x, u, t):
         """

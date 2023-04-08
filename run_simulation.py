@@ -8,9 +8,9 @@ from state_estimation import *
 from obstacle import *
 
 #system initial condition
-N = 3
+N = 1
 if N == 1:
-    q0 = np.array([[0, 0, np.pi/4]]).T
+    q0 = np.array([[0, 0, 0.1]]).T
 else:
     q0 = np.array([[0, 0, np.pi/4, 0, 0, np.pi/3, 0, 5, -np.pi/4]]).T
 
@@ -22,11 +22,15 @@ mean = 0
 sd = 0
 observer = ObserverManager(dynamics, mean, sd)
 
-#set a desired state
-xD = np.array([[4, 4, 0]]).T
+#set a desired state vector for the system
+xD = np.array([[1, 5, 0]]).T
+
+#define a trajectory
+T = 5
+traj = TrajectoryManager(q0, xD, T, N)
 
 #Create a controller manager
-controller = ControllerManager(observer, None, None, 'Test')
+controller = ControllerManager(observer, None, traj, 'TurtlebotFBLin')
 
 #create a simulation environment
 env = Environment(dynamics, controller, observer)
