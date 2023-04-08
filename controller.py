@@ -46,6 +46,34 @@ class Controller:
         """
         return self._u
     
+class TurtlebotTest:
+    def __init__(self, observer):
+        """
+        Test class for a system of turtlebot controllers.
+        Simply drives each turtlebot straight (set u1 = 1).
+        """
+        #store observer
+        self.observer = observer
+    
+    def eval_input(self, t):
+        """
+        Solves for the control input to turtlebot i using a CBF-QP controller
+        Inputs:
+            t (float): current time in simulation
+        """
+        #set velocity input to 1, omega to zero (simple test input)
+        self._u = np.array([[1, 0.1]]).T
+
+    def get_input(self):
+        """
+        Retrieves input stored in class parameter
+        Returns:
+            self._u: most recent input stored in class paramter
+        """
+        #call the observer to test
+        q = self.observer.get_state()
+        return self._u
+    
 class TurtlebotFBLin:
     def __init__(self, observer, trajectory):
         """
@@ -147,29 +175,45 @@ class ControllerManager(Controller):
         self._u = None
 
         #get the number of turtlebots in the system
-        self.N = self.observer.dynamics.N
+        self.N = self.observerManager.dynamics.N
 
         #create a controller dictionary
         self.controllerDict = {}
 
         #create N separate controllers - one for each turtlebot - use each trajectory in the trajectory dict
         for i in range(self.N):
-            #extract the ith trajectory
-            trajI = self.trajectoryManager.get_traj_i(i)
-
-            #get the ith observer object
-            egoObsvI = self.observerManager.get_observer_i(i)
-
-            #get the ith barrier object
-            barrierI = self.barrierManager.get_barrier_list_i(i)
-
             #create a controller using the three objects above - add the controller to the dict
             if self.controlType == 'TurtlebotCBFQP':
+                #extract the ith trajectory
+                trajI = self.trajectoryManager.get_traj_i(i)
+
+                #get the ith observer object
+                egoObsvI = self.observerManager.get_observer_i(i)
+
+                #get the ith barrier object
+                barrierI = self.barrierManager.get_barrier_list_i(i)
+
                 #create a CBF QP controller
                 self.controllerDict[i] = TurtlebotCBFQP(egoObsvI, barrierI, trajI)
+
             elif self.controlType == 'TurtlebotFBLin':
+                #extract the ith trajectory
+                trajI = self.trajectoryManager.get_traj_i(i)
+
+                #get the ith observer object
+                egoObsvI = self.observerManager.get_observer_i(i)
+
+                #get the ith barrier object - May commend this out
+                barrierI = self.barrierManager.get_barrier_list_i(i)
+
                 #create a feedback linearizing controller
                 self.controllerDict[i] = TurtlebotFBLin(egoObsvI, trajI)
+
+            elif self.controlType == 'Test':
+                #define a test type controller - is entirely open loop
+                egoObsvI = self.observerManager.get_observer_i(i)
+                self.controllerDict[i] = TurtlebotTest(egoObsvI)
+
             else:
                 raise Exception("Invalid Controller Name Error")
 

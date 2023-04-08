@@ -118,10 +118,11 @@ class TurtlebotSysDyn(Dynamics):
         xDot = np.zeros((self.stateDimn, 1))
         for i in range(self.N):
             #extract the orientation angle of the Nth turtlebot
-            PHI = x[2, 0]
+            PHI = x[3*i+2, 0] #[x, y, p, x, y, p], [0, 1, 2, 3, 4, 5]
             #find the derivative of the state vector of the Nth turtlebot
             ui = u[2*i: 2*i + 2]
-            xDot[2*i:2*i + 3, 0] = np.array([[np.cos(PHI), 0], [np.sin(PHI), 0], [0, 1]])@ui
+            #calculate xDot - must reshape to slice in
+            xDot[3*i:3*i + 3, 0] = (np.array([[np.cos(PHI), 0], [np.sin(PHI), 0], [0, 1]])@ui).reshape((3, ))
         #return the filled in state vector for all N turtlebots
         return xDot
 
@@ -146,39 +147,47 @@ class TurtlebotSysDyn(Dynamics):
             ax.axis([0, GOAL_POS[0]+2.5, 0, GOAL_POS[1]+2.5])
             # set equal aspect such that the circle is not shown as ellipse
             ax.set_aspect("equal")
-            # create a point in the axes
-            point, = ax.plot(0,1, marker="o")
+            # create a set of points in the axes
+            points, = ax.plot([],[], marker="o", linestyle='None')
             num_frames = xData.shape[1]-1
 
             #plot the obstacle
-            circle = plt.Circle((OBS_POS[0], OBS_POS[1]), radius = OBS_R, fc = 'c')
-            plt.gca().add_patch(circle)
-            ax.scatter([GOAL_POS[0]], [GOAL_POS[1]], color = 'y') #goal position
+            # circle = plt.Circle((OBS_POS[0], OBS_POS[1]), radius = OBS_R, fc = 'c')
+            # plt.gca().add_patch(circle)
+            # ax.scatter([GOAL_POS[0]], [GOAL_POS[1]], color = 'y') #goal position
                 
             def animate(i):
-                x = xData[0, i]
-                y = xData[1, i]
-                point.set_data(x, y)
-                return point,
+                x = []
+                y = []
+                #get the x, y data associated with each turtlebot
+                for j in range(self.N):
+                    x.append(xData[3*j, i])
+                    y.append(xData[3*j+1, i])
+                points.set_data(x, y)
+                return points,
             
             anim = animation.FuncAnimation(fig, animate, frames=num_frames, interval=1/FREQ*1000, blit=True)
             plt.xlabel("X Position (m)")
             plt.ylabel("Y Position (m)")
-            plt.title("Position of Car in Space")
+            plt.title("Positions of Turtlebots in Space")
             plt.show()
 
-        #Plot the spatial trajectory of the car
+        #Plot the spatial trajectory of the turtlebots
         fig, ax = plt.subplots()
         ax.set_aspect("equal")
-        xCoords = xData[0, :].tolist() #extract all of the velocity data to plot on the y axis
-        yCoords = xData[1, :].tolist() #remove the last point, get artefacting for some reason
-        ax.plot(xCoords[0:-1], yCoords[0:-1])
-        ax.scatter([GOAL_POS[0]], [GOAL_POS[1]], color = 'y') #goal position
-        circle = plt.Circle((OBS_POS[0], OBS_POS[1]), radius = OBS_R, fc = 'c')
-        plt.gca().add_patch(circle)
+        #iterate over each turtlebot state vector
+        for j in range(self.N):
+            xCoords = xData[3*j, :].tolist() #extract all of the velocity data to plot on the y axis
+            yCoords = xData[3*j+1, :].tolist() #remove the last point, get artefacting for some reason
+            ax.plot(xCoords[0:-1], yCoords[0:-1])
+        # ax.scatter([GOAL_POS[0]], [GOAL_POS[1]], color = 'y') #goal position
+        # circle = plt.Circle((OBS_POS[0], OBS_POS[1]), radius = OBS_R, fc = 'c')
+        legendList = ["Bot " + str(i) for i in range(self.N)]
+        plt.legend(legendList)
+        # plt.gca().add_patch(circle)
         plt.xlabel("X Position (m)")
         plt.ylabel("Y Position (m)")
-        plt.title("Position of Turtlebot in Space")
+        plt.title("Positions of Turtlebots in Space")
         plt.show()
         
         #Plot each state variable in time
@@ -187,17 +196,20 @@ class TurtlebotSysDyn(Dynamics):
         xlabel = 'Time (s)'
         ylabels = ['X Pos (m)', 'Y Pos (m)', 'Phi (rad)', "V (m/s)", "Omega (rad/s)"]
         indices = [0, 1, 2]
-        n = 0 #index in the subplot
         #plot the states
-        for i in indices:
-            axs[n].plot(tData.reshape((tData.shape[1], )).tolist()[0:-1], xData[i, :].tolist()[0:-1])
-            axs[n].set(ylabel=ylabels[n]) #pull labels from the list above
-            axs[n].grid()
-            n += 1
-        #plot the inputs
-        for i in range(2):
-            axs[i+3].plot(tData.reshape((tData.shape[1], )).tolist()[0:-1], uData[i, :].tolist()[0:-1])
-            axs[i+3].set(ylabel=ylabels[i+3])
-            axs[i+3].grid()
+        for j in range(self.N):
+            n = 0 #index in the subplot
+            for i in indices:
+                axs[n].plot(tData.reshape((tData.shape[1], )).tolist()[0:-1], xData[3*j + i, :].tolist()[0:-1])
+                axs[n].set(ylabel=ylabels[n]) #pull labels from the list above
+                axs[n].grid()
+                n += 1
+            #plot the inputs
+            for i in range(2):
+                axs[i+3].plot(tData.reshape((tData.shape[1], )).tolist()[0:-1], uData[2*j + i, :].tolist()[0:-1])
+                axs[i+3].set(ylabel=ylabels[i+3])
+                axs[i+3].grid()
         axs[4].set(xlabel = xlabel)
+        legendList = ["Bot " + str(i) for i in range(self.N)]
+        plt.legend(legendList)
         plt.show()

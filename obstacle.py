@@ -1,6 +1,4 @@
 import numpy as np
-from lyapunov_barrier import PointBarrier
-
 #File containing classes involved in managing obstacle avoidance.
 
 class Circle:

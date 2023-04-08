@@ -8,29 +8,25 @@ from state_estimation import *
 from obstacle import *
 
 #system initial condition
-q0 = np.array([[0.1, 0, 0]]).T
+N = 3
+if N == 1:
+    q0 = np.array([[0, 0, np.pi/4]]).T
+else:
+    q0 = np.array([[0, 0, np.pi/4, 0, 0, np.pi/3, 0, 5, -np.pi/4]]).T
 
 #create a dynamics object for the double integrator
-dynamics = TurtlebotDyn(q0)
+dynamics = TurtlebotSysDyn(q0, N = N) #set the number of turtlebots to 1 for now
 
-#create an observer based on the dynamics object with noise parameters
+#create an observer manager based on the dynamics object with noise parameters
 mean = 0
 sd = 0
-observer = StateObserver(dynamics, mean, sd)
-
-#create a circular obstacle
-r = 0.75
-c = np.array([[2, 2.5]]).T
-circle = Circle(r, c)
+observer = ObserverManager(dynamics, mean, sd)
 
 #set a desired state
 xD = np.array([[4, 4, 0]]).T
 
-#define MPC Horizon
-N = 30
-
-#Create an MPC Controller
-controller = TurtlebotMPC(observer, [circle], xD, N = N)
+#Create a controller manager
+controller = ControllerManager(observer, None, None, 'Test')
 
 #create a simulation environment
 env = Environment(dynamics, controller, observer)

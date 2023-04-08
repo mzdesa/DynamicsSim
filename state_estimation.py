@@ -26,7 +26,7 @@ class StateObserver:
             return self.dynamics.get_state() + np.random.normal(self.mean, self.sd, (self.stateDimn, 1))
         return self.dynamics.get_state()
     
-class EgoTurtlebotObserver:
+class EgoTurtlebotObserver(StateObserver):
     def __init__(self, dynamics, mean, sd, index):
         """
         Init function for a state observer for a single turtlebot within a system of N turtlebots
@@ -48,7 +48,8 @@ class EgoTurtlebotObserver:
         Returns:
             3x1 numpy array, observed state vector of the ith turtlebot in the system (zero indexed)
         """
-        return self.get_state()[2*self.index : 2*self.index + 3].reshape((3, 1))
+        # print('hi')
+        return super().get_state()[3*self.index : 3*self.index + 3].reshape((3, 1))
     
     def get_vel(self):
         """
@@ -68,7 +69,7 @@ class EgoTurtlebotObserver:
         xDot = self.dynamics.deriv(x, u, 0) #pass in zero for the time (placeholder for time invar system)
 
         #slice out the derivative of the ith turtlebot and reshape
-        return xDot[2*self.index : 2*self.index + 3].reshape((3, 1))
+        return xDot[3*self.index : 3*self.index + 3].reshape((3, 1))
     
     
 class ObserverManager:
@@ -100,6 +101,19 @@ class ObserverManager:
             i (integet): index of the turtlebot whose observer we'd like to retrieve
         """
         return self.observerDict[i]
+    
+    def get_state(self):
+        """
+        Returns a potentially noisy observation of the *entire* system state (vector for all N bots)
+        """
+        #get each individual observer state
+        xHatList = []
+        for i in range(self.dynamics.N):
+            #call get state from the ith observer
+            xHatList.append(self.get_observer_i(i).get_state())
+
+        #vstack the individual observer states
+        return np.vstack(xHatList)
 
     
 class DepthCam:

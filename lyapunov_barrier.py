@@ -39,12 +39,6 @@ class LyapunovBarrier:
         [..., vDDot, vDot, v] ((self.dynamics.relDegree + 1, 1) numpy Array): dynamics.relDegree lyapunov/Barrier time derivs, Descending order
         """
         return self._vals
-
-"""
-********************************
-ADD YOUR LYAPUNOV FUNCTIONS HERE
-********************************
-"""
     
 """
 ********************************
