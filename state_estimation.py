@@ -55,7 +55,7 @@ class EgoTurtlebotObserver(StateObserver):
         """
         Returns a potentially noisy measurement of the derivative of the state vector of the ith turtlebot
         Inputs:
-            i (int): the index of the desired turtlebot position in the system (zero indexed)
+            None
         Returns:
             3x1 numpy array, observed derivative of the state vector of the ith turtlebot in the system (zero indexed)
         """
@@ -73,6 +73,21 @@ class EgoTurtlebotObserver(StateObserver):
 
         #slice out the derivative of the ith turtlebot and reshape
         return xDot[3*self.index : 3*self.index + 3].reshape((3, 1))
+    
+    def get_z(self):
+        """
+        Return the augmented input vector, z, of the system from the ith turtlebot.
+        Inputs:
+            None
+        Returns:
+            z (2x1 NumPy Array): augmented input vector of the ith turtlebot
+        """
+        #call the get z function from the system dynamics
+        z = self.dynamics.get_z()
+
+        #slice out the ith term
+        return z[2*self.index : 2*self.index + 2].reshape((2, 1))
+
     
     
 class ObserverManager:

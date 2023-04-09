@@ -64,7 +64,7 @@ class TurtlebotBarrier(LyapunovBarrier):
         self.observerObstacle = observerObstacle #store an observer for the obstacle
 
         #define the radius of the turtlebot
-        self.rt = 0.3
+        self.rt = 0.15
     
     def eval(self, u, t):
         """
@@ -94,9 +94,51 @@ class TurtlebotBarrier(LyapunovBarrier):
         #return the two derivatives and the barrier function
         self._vals = [h, hDot]
         return self._vals
+    
+class TurtlebotBarrierDeadlock(TurtlebotBarrier):
+    def __init__(self, stateDimn, inputDimn, dynamics, observerEgo, observerObstacle, buffer):
+        """
+        Turtlebot barrier function for deadlock resolution. This barrier function is relative degree 2
+        with respect to the linearized dynamics q'Dot = Aq' + Bz -> these are used to compute the derivative.
+        """
+        #call the super init function
+        super().__init__(stateDimn, inputDimn, dynamics, observerEgo, observerObstacle, buffer)
+
+    def eval(self, u, t):
+        """
+        Evaluate the CBF and its derivatives. 
+        Inputs:
+            u ((2x1) NumPy Array): the z input to the linearized system.
+        Returns:
+            [h, hDot, hDDot] (Python List of floats): barrier function and its derivatives
+        """
+        #get the position and velocity of the ego and the obstacle objects
+        qe = self.observerEgo.get_state()
+
+        #calculate qeDot from the observer (Not from v input!)
+        qeDot = self.observerEgo.get_vel()
+
+        #get the obstacle states from the observer
+        qo = self.observerObstacle.get_state()
+        qoDot = self.observerObstacle.get_vel()
+        zo = self.observerObstacle.get_z()
+
+        #evaluate the CBF
+        h = (qe[0, 0] - qo[0, 0])**2 + (qe[1, 0] - qo[1, 0])**2 - (2*self.rt)**2
+
+        #evaluate the derivative of the CBF
+        hDot = 2*(qe[0, 0] - qo[0, 0])*((qeDot[0, 0] - qoDot[0, 0])) + 2*(qe[1, 0] - qo[1, 0])*((qeDot[1, 0] - qoDot[1, 0]))
+
+        #using the linearized dynamics, return the second derivative of the CBF
+        hDDot = 2*(qeDot[0, 0] - qoDot[0, 0])**2 + 2*(qe[0, 0] - qo[0, 0])*((u[0] - zo[0, 0])) + 2*(qeDot[1, 0] - qoDot[1, 0])**2 + 2*(qe[1, 0] - qo[1, 0])*((u[1] - zo[1, 0]))
+        
+        #return the two derivatives and the barrier function
+        self._vals = [h, hDot, hDDot]
+        return self._vals
+
 
 class BarrierManager:
-    def __init__(self, N, stateDimn, inputDimn, dynamics, observer, buffer):
+    def __init__(self, N, stateDimn, inputDimn, dynamics, observer, buffer, dLock = False):
         """
         Class to organize barrier functionf or a system of N turtlebots.
         Initializes N-1 TurtlebotBarrier objects for each of the N turtlebots in the system.
@@ -106,6 +148,7 @@ class BarrierManager:
             inputDimn (int): length of input vector
             dynamics (Dynamics): dynamics object for the whole turtlebot system
             observer (ObserverManager): observer object for the whole turtlebot system
+            dLock (boolean): apply deadlock version of CBF to the system
         """
         #store the number of turtlebots in the system
         self.N = N
@@ -115,6 +158,9 @@ class BarrierManager:
 
         #store the observer manager
         self.observerManager = observer
+
+        #store the deadlock option
+        self.dLock = dLock
 
         #create a set of N - 1 Barrier functions for that turtlebot
         for i in range(self.N):
@@ -136,7 +182,11 @@ class BarrierManager:
                 observerObstacle = self.observerManager.get_observer_i(j) #get the obstacle observer
 
                 #append a barrier function with the obstacle and ego observers
-                egoBarrierList.append(TurtlebotBarrier(stateDimn, inputDimn, dynamics, observerEgo, observerObstacle, buffer))
+                if not self.dLock:
+                    egoBarrierList.append(TurtlebotBarrier(stateDimn, inputDimn, dynamics, observerEgo, observerObstacle, buffer))
+                else:
+                    #apply the deadlock version of the barrier function
+                    egoBarrierList.append(TurtlebotBarrierDeadlock(stateDimn, inputDimn, dynamics, observerEgo, observerObstacle, buffer))
 
             #store the ego barrier list in the barrier function dictionary for the robots
             self.barrierDict[i] = egoBarrierList

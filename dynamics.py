@@ -111,6 +111,24 @@ class TurtlebotSysDyn(Dynamics):
 
         #set the initial input self._u to be the zero vector (required for FB linearization)
         self._u = np.zeros((2*self.N, 1))
+        self._z = np.zeros((2*self.N, 1)) #store a copy of the augmented input vector as well
+
+    def set_z(self, z, i):
+        """
+        Function to set the value of z, the augmented input vctor.
+        Inputs:
+            z ((2N x 1) NumPy Array): Augmented input vector
+            i (int): index we wish to place the updated z at
+        """
+        #store in class attribute
+        self._z[2*i : 2*i + 2, 0] = z.reshape((2, ))
+    
+    def get_z(self):
+        """
+        Function to return the augmented input vector, z, at any point.
+        """
+        #retrieve and return augmented input vector
+        return self._z
 
     def deriv(self, x, u, t):
         """

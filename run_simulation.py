@@ -6,13 +6,11 @@ from controller import *
 from trajectory import *
 from state_estimation import *
 from obstacle import *
+from utils import *
 
 #system initial condition
-N = 3
-if N == 1:
-    q0 = np.array([[0, 0, 0.1]]).T
-else:
-    q0 = np.array([[0, 0, 0, 5, 0, 0, 0, 5, 0]]).T
+N = 5
+q0 = gen_init_cond(N)
 
 #create a dynamics object for the double integrator
 dynamics = TurtlebotSysDyn(q0, N = N) #set the number of turtlebots to 1 for now
@@ -23,20 +21,25 @@ sd = 0
 observerManager = ObserverManager(dynamics, mean, sd)
 
 #set a desired state vector for the system
-xD = np.array([[5, 5, 0, 0, 5, 0, 5, 0, 0]]).T
+qD = gen_goal_state(N)
 
 #define a trajectory manager
-T = 5
-trajManager = TrajectoryManager(q0, xD, T, N)
+T = 10
+trajManager = TrajectoryManager(q0, qD, T, N)
 
 #define a barrier manager
-barrierManager = BarrierManager(N, 3, 2, dynamics, observerManager, 0)
+useDeadLock = True
+barrierManager = BarrierManager(N, 3, 2, dynamics, observerManager, 0, dLock = useDeadLock)
 
 #Create a controller manager
-controller = ControllerManager(observerManager, barrierManager, trajManager, 'TurtlebotCBFQP')
+if useDeadLock:
+    ctrlType = 'TurtlebotCBFQPDeadlock'
+else:
+    ctrlType = 'TurtlebotCBFQP'
+controller = ControllerManager(observerManager, barrierManager, trajManager, ctrlType)
 
 #create a simulation environment
-env = Environment(dynamics, controller, observerManager)
+env = Environment(dynamics, controller, observerManager, T = T)
 
 #run the simulation
 env.run()

@@ -1,13 +1,14 @@
 import numpy as np
 
 class Environment:
-    def __init__(self, dynamics, controller, observer):
+    def __init__(self, dynamics, controller, observer, T = 10):
         """
         Initializes a simulation environment
         Args:
             dynamics (Dynamics): system dynamics object
             controller (Controller): system controller object
             observer (Observer): system state estimation object
+            T (Float): simulation time
         """
         #store system parameters
         self.dynamics = dynamics
@@ -29,7 +30,7 @@ class Environment:
         self.SIM_FREQ = 1000 #integration frequency in Hz
         self.CONTROL_FREQ = 50 #control frequency in Hz
         self.SIMS_PER_STEP = self.SIM_FREQ//self.CONTROL_FREQ
-        self.TOTAL_SIM_TIME = 5 #total simulation time in s
+        self.TOTAL_SIM_TIME = T #total simulation time in s
         
         #Define history arrays
         self.xHist = np.zeros((self.dynamics.stateDimn, self.TOTAL_SIM_TIME*self.CONTROL_FREQ))

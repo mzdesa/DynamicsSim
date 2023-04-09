@@ -122,9 +122,12 @@ class TurtlebotFBLin:
         #return the z input
         return z
     
-    def eval_w_input(self, t):
+    def eval_w_input(self, t, z):
         """
         Solve for the w input to the system
+        Inputs:
+            t (float): current time in the system
+            z ((2x1) NumPy Array): z input to the system
         """
         #get the current phi
         phi = self.observer.get_state()[2, 0]
@@ -136,9 +139,6 @@ class TurtlebotFBLin:
         #first, eval A(q)
         Aq = np.array([[np.cos(phi), -v*np.sin(phi)], 
                        [np.sin(phi), v*np.cos(phi)]])
-        
-        #next, get the z input
-        z = self.eval_z_input(t)
 
         #invert to get the w input - use pseudoinverse to avoid problems
         w = np.linalg.pinv(Aq)@z
@@ -153,14 +153,21 @@ class TurtlebotFBLin:
             t (float): current time in simulation
             i (int): index of turtlebot in the system we wish to control (zero indexed)
         """
+        #get the z input to the system
+        z = self.eval_z_input(t)
+
+        #SET THE VALUE OF z in the DYNAMICS
+        self.observer.dynamics.set_z(z, self.observer.index)
+
         #get the w input to the system
-        w = self.eval_w_input(t)
+        w = self.eval_w_input(t, z)
 
         #integrate the w1 term to get v
         self.vDotInt += w[0, 0]*self.dt
 
         #return the [v, omega] input
         self._u = np.array([[self.vDotInt, w[1, 0]]]).T
+        return self._u
     
     def get_input(self):
         """
@@ -173,7 +180,9 @@ class TurtlebotFBLin:
 class TurtlebotCBFQP:
     def __init__(self, observer, barriers, trajectory):
         """
-        Class for a CBF-QP controller for a single turtlebot within a larger system.
+        Class for a CBF-QP controller for a single turtlebot within a larger system. This implementation
+        applies a CBF-QP directly over the turtlebot feedback linearizing input, and does not include 
+        deadlock resolution steps.
         Args:
             observer (EgoTurtlebotObserver): state observer object for a single turtlebot within the system
             barriers (List of TurtlebotBarrier): List of TurtlebotBarrier objects corresponding to that turtlebot
@@ -196,6 +205,7 @@ class TurtlebotCBFQP:
         Inputs:
             t (float): current time in simulation
             i (int): index of turtlebot in the system we wish to control (zero indexed)
+            dLock (boolean): include deadlock resolution strategy in controller
         """
         #get the state vector of turtlebot i
         q = self.observer.get_state()
@@ -221,7 +231,6 @@ class TurtlebotCBFQP:
             #compute the optimization constraint
             opti.subject_to(hDot >= -gamma * h)
 
-        #define the cost function
         cost = (u - kX).T @ (u - kX)
 
         opti.minimize(cost)
@@ -237,8 +246,9 @@ class TurtlebotCBFQP:
             print("Solver failed!")
             solverFailed = True
             uOpt = np.zeros((2, 1))
-
+        #evaluate and return the input
         self._u = uOpt.reshape((2, 1))
+        return self._u
     
     def get_input(self):
         """
@@ -248,6 +258,95 @@ class TurtlebotCBFQP:
         """
         return self._u
     
+class TurtlebotCBFQPDeadlock(TurtlebotCBFQP):
+    def __init__(self, observer, barriers, trajectory):
+        """
+        Class for CBF QP Controller with embedded deadlock resolution. Apply the CBF directly over z in the 
+        feedback linearization step.
+        Args:
+            observer (EgoTurtlebotObserver): state observer object for a single turtlebot within the system
+            barriers (List of TurtlebotBarrierDeadlock): List of TurtlebotBarrier objects corresponding to that turtlebot
+            traj (Trajectory): trajectory object
+        """
+        #call the super initialization function
+        super().__init__(observer, barriers, trajectory)
+
+        #store the time step dt for integration
+        self.dt = 1/50 #from the control frequency in environment.py
+
+        #store an initial value for the vDot integral
+        self.vDotInt = 0
+
+    def eval_z_input(self, t):
+        """
+        Evaluate the Z input to the system based off of the CBF QP with deadlock resolution.
+        Applies a CBF-QP around the nominal z input from feedback linearization.
+        """
+        #first, get z from the nominal FB lin contorller
+        zNom = self.nominalController.eval_z_input(t)
+
+        #now, apply a CBF-QP over this z input using the simplified dynamics. This will be a second order CBF.
+        #set up the optimization problem
+        opti = ca.Opti()
+
+        #define the decision variable
+        u = opti.variable(2, 1)
+
+        #define a weighting variable for CBF-QP to encourage steering
+        H = np.diag([1, 0.001])
+
+        #define gamma for CBF tuning (100, 29)
+        k1 = 100
+        k2 = 29
+
+        #apply the N-1 barrier constraints
+        for bar in self.barriers:
+            #get the values of h, hDot, hDDot
+            h, hDot, hDDot = bar.eval(u, t)
+
+            #compute the optimization constraint
+            opti.subject_to(hDDot + k2*hDot + k1*h >= 0)
+
+        #define the cost function
+        cost = (u - zNom).T @ H @ (u - zNom)
+
+        opti.minimize(cost)
+        option = {"verbose": False, "ipopt.print_level": 0, "print_time": 0}
+        opti.solver("ipopt", option)
+
+        #solve optimization
+        try:
+            sol = opti.solve()
+            uOpt = sol.value(u) #extract optimal input
+            solverFailed = False
+        except:
+            print("Solver failed!")
+            solverFailed = True
+            uOpt = np.zeros((2, 1))
+        #evaluate and return the input
+        zOpt = uOpt.reshape((2, 1))
+        return zOpt
+    
+    def eval_input(self, t):
+        """
+        Evaluate the u input to the system using deadlock resolution.
+        """
+        #first, evaluate the z input based on the CBF constraints
+        zOpt = self.eval_z_input(t)
+
+        #SET THE VALUE OF Z IN THE DYNAMICS
+        self.observer.dynamics.set_z(zOpt, self.observer.index)
+
+        #next, evaluate w input based on the CBF z input
+        wOpt = self.nominalController.eval_w_input(t, zOpt)
+        
+        #integrate the w1 term to get v
+        self.vDotInt += wOpt[0, 0]*self.dt
+
+        #return the [v, omega] input
+        self._u = np.array([[self.vDotInt, wOpt[1, 0]]]).T
+        return self._u
+        
 
 class ControllerManager(Controller):
     def __init__(self, observerManager, barrierManager, trajectoryManager, controlType):
@@ -291,6 +390,19 @@ class ControllerManager(Controller):
 
                 #create a CBF QP controller
                 self.controllerDict[i] = TurtlebotCBFQP(egoObsvI, barrierI, trajI)
+
+            elif self.controlType == 'TurtlebotCBFQPDeadlock':
+                #extract the ith trajectory
+                trajI = self.trajectoryManager.get_traj_i(i)
+
+                #get the ith observer object
+                egoObsvI = self.observerManager.get_observer_i(i)
+
+                #get the ith barrier object
+                barrierI = self.barrierManager.get_barrier_list_i(i)
+
+                #create a CBF QP controller
+                self.controllerDict[i] = TurtlebotCBFQPDeadlock(egoObsvI, barrierI, trajI)
 
             elif self.controlType == 'TurtlebotFBLin':
                 #extract the ith trajectory
