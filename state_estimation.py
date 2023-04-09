@@ -65,6 +65,9 @@ class EgoTurtlebotObserver(StateObserver):
         #now, get the noisy measurement of the entire state vector
         x = self.get_state()
 
+        #to pass into the deriv function, augment x with zeros elsewhere
+        x = np.vstack((np.zeros((self.index*3, 1)), x, np.zeros(((self.dynamics.N - 1 - self.index)*3, 1))))
+        
         #calculate the derivative of the ith state vector using the noisy state measurement
         xDot = self.dynamics.deriv(x, u, 0) #pass in zero for the time (placeholder for time invar system)
 

@@ -133,7 +133,6 @@ class TurtlebotFBLin:
         qDot = self.observer.get_vel()[0:2]
         v = np.linalg.norm(qDot)
 
-        print(v)
         #first, eval A(q)
         Aq = np.array([[np.cos(phi), -v*np.sin(phi)], 
                        [np.sin(phi), v*np.cos(phi)]])
@@ -189,7 +188,7 @@ class TurtlebotCBFQP:
         self.nominalController = TurtlebotFBLin(observer, trajectory)
 
         #store the input parameter (should not be called directly but with get_input)
-        self._u = None
+        self._u = np.zeros((2, 1))
 
     def eval_input(self, t):
         """
@@ -202,11 +201,44 @@ class TurtlebotCBFQP:
         q = self.observer.get_state()
 
         #get the nominal control input to the system
-        kX = self.nominalController.eval_input()
+        self.nominalController.eval_input(t) #call the evaluation function
+        kX = self.nominalController.get_input()
+
+        #set up the optimization problem
+        opti = ca.Opti()
+
+        #define the decision variable
+        u = opti.variable(2, 1)
+
+        #define gamma for CBF tuning
+        gamma = 1
 
         #apply the N-1 barrier constraints
+        for bar in self.barriers:
+            #get the values of h and hDot
+            h, hDot = bar.eval(u, t)
 
-        self._u = ...
+            #compute the optimization constraint
+            opti.subject_to(hDot >= -gamma * h)
+
+        #define the cost function
+        cost = (u - kX).T @ (u - kX)
+
+        opti.minimize(cost)
+        option = {"verbose": False, "ipopt.print_level": 0, "print_time": 0}
+        opti.solver("ipopt", option)
+
+        #solve optimization
+        try:
+            sol = opti.solve()
+            uOpt = sol.value(u) #extract optimal input
+            solverFailed = False
+        except:
+            print("Solver failed!")
+            solverFailed = True
+            uOpt = np.zeros((2, 1))
+
+        self._u = uOpt.reshape((2, 1))
     
     def get_input(self):
         """

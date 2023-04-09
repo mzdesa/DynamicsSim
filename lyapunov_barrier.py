@@ -47,62 +47,52 @@ ADD YOUR BARRIER FUNCTIONS HERE
 """
 
 class TurtlebotBarrier(LyapunovBarrier):
-    def __init__(self, iEgo, iObstacle, stateDimn, inputDimn, dynamics, observer, buffer):
+    def __init__(self, stateDimn, inputDimn, dynamics, observerEgo, observerObstacle, buffer):
         """
         Double integrator system Lyapunov function.
         Args:
-            iEgo (int): index of the ego turtlebot (zero-indexed)
-            iObstacle (int): index of the obstacle turtlebot (zero-indexed)
             stateDimn (int): length of (entire) state vector
             inputDimn (int): length of input vector
             dynamics (Dynamics): dynamics object for the entire turtlebot system
-            observer (EgoObserver): observer object for a single turtlebot in the system
+            observerEgo (EgoObserver): observer object for the turtlebot we're deciding the input to
+            observerObstacle (EgoObserver): observer object for an obstacle
         """
         super().__init__(stateDimn, inputDimn, dynamics)
-        self.iEgo = iEgo
-        self.iObstacle = iObstacle
         self._barrierPt = None
         self._buffer = buffer #barrier buffer
-        self.observer = observer #store the system observer
-        
-    def set_barrier_pt(self, pt):
-        """
-        Function to update the point used in the barrier function (in the world frame)
-        Args:
-            pt (3 x 1 numpy array): new point to be used for a barrier function, (x, y, z) position
-        """
-        self._barrierPt = pt
-    
-    def get_barrier_pt(self):
-        """
-        Retreive the barrier point from the class attribute
-        """
-        return self._barrierPt
+        self.observerEgo = observerEgo #store the system observer
+        self.observerObstacle = observerObstacle #store an observer for the obstacle
+
+        #define the radius of the turtlebot
+        self.rt = 0.3
     
     def eval(self, u, t):
         """
         Evaluate the Euclidean distance to the barrier point.
         Args:
-            u (input_dimn x 1 numpy array): current input vector
+            u (input_dimn x 1 numpy array): input vector
         Returns:
             (List): cbf time derivatives
         """
-        #first, get the spatial and velocity vectors from the observer
-        x = self.observer.get_pos()
-        v = self.observer.get_vel()
-        
-        #evaluate the barrier function value
-        h = ((x - self._barrierPt).T@(x - self._barrierPt))[0, 0] - self._buffer**2
-        
-        #evaluate its first derivative - assume a still obstacle
-        hDot = (2*v.T@(x - self._barrierPt))[0, 0]
-        
-        #evaluate its second derivative - assume double integrator point mass dynamics
-        xddot = u #pull directly from the force vector, double integrator system
-        hDDot = 2*(xddot.T@(x - self._barrierPt) + v.T@v)
+        #get the position and velocity of the ego and the obstacle objects
+        qe = self.observerEgo.get_state()
+
+        #calculate qeDot from system dynamics (Not from observer ego)
+        phi = qe[2, 0]
+        qeDot = np.array([[np.cos(phi), 0], [np.sin(phi), 0], [0, 1]])@u
+
+        #get the obstacle states from the observer
+        qo = self.observerObstacle.get_state()
+        qoDot = self.observerObstacle.get_vel()
+
+        #evaluate the CBF
+        h = (qe[0, 0] - qo[0, 0])**2 + (qe[1, 0] - qo[1, 0])**2 - (2*self.rt)**2
+
+        #evaluate the derivative of the CBF
+        hDot = 2*(qe[0, 0] - qo[0, 0])*((qeDot[0, 0] - qoDot[0, 0])) + 2*(qe[1, 0] - qo[1, 0])*((qeDot[1, 0] - qoDot[1, 0]))
         
         #return the two derivatives and the barrier function
-        self._vals = [hDDot, hDot, h]
+        self._vals = [h, hDot]
         return self._vals
 
 class BarrierManager:
@@ -115,13 +105,16 @@ class BarrierManager:
             stateDimn (int): length of state vector
             inputDimn (int): length of input vector
             dynamics (Dynamics): dynamics object for the whole turtlebot system
-            observer (DoubleIntObserver): observer object for the whole turtlebot system
+            observer (ObserverManager): observer object for the whole turtlebot system
         """
         #store the number of turtlebots in the system
         self.N = N
 
         #create a barrier function dictionary that stores the N - 1 barriers for each turtlebot
-        self.barrierList = {}
+        self.barrierDict = {}
+
+        #store the observer manager
+        self.observerManager = observer
 
         #create a set of N - 1 Barrier functions for that turtlebot
         for i in range(self.N):
@@ -134,16 +127,19 @@ class BarrierManager:
             #initialize an empty list to contain the barrier functions for the ego turtlebot
             egoBarrierList = []
 
-            #get the observer corresponding to that turtlebot
-            egoObsvI = self.observerManager.get_observer_i(i)
+            #get the observer corresponding to the ego turtlebot
+            observerEgo = self.observerManager.get_observer_i(i)
 
             #loop over the remaining indices and create a barrier function for each obstacle turtlebot
             for j in indexList:
                 #ego index is i, obstacle index is j
-                egoBarrierList.append(TurtlebotBarrier(i, j, stateDimn, inputDimn, dynamics, egoObsvI, buffer))
+                observerObstacle = self.observerManager.get_observer_i(j) #get the obstacle observer
+
+                #append a barrier function with the obstacle and ego observers
+                egoBarrierList.append(TurtlebotBarrier(stateDimn, inputDimn, dynamics, observerEgo, observerObstacle, buffer))
 
             #store the ego barrier list in the barrier function dictionary for the robots
-            self.barrierList[i] = egoBarrierList
+            self.barrierDict[i] = egoBarrierList
 
     def get_barrier_list_i(self, i):
         """
@@ -153,4 +149,4 @@ class BarrierManager:
         Returns:
             barrierList (TurtlebotBarrier List): List of TurtlebotBarrier objects corresponding to turtlebot i
         """
-        return self.barrierList[i]
+        return self.barrierDict[i]

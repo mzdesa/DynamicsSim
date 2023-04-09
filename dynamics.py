@@ -110,7 +110,7 @@ class TurtlebotSysDyn(Dynamics):
         super().__init__(x0, self.N*stateDimn, self.N*inputDimn, relDegree) #scale the input dimn and rel degree by N for all turtlebots
 
         #set the initial input self._u to be the zero vector (required for FB linearization)
-        self._u = np.zeros((2, 1))
+        self._u = np.zeros((2*self.N, 1))
 
     def deriv(self, x, u, t):
         """
