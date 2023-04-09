@@ -162,15 +162,12 @@ class TurtlebotSysDyn(Dynamics):
             animate (bool, optional): Whether to generate animation or not. Defaults to True.
         """
         #Set constant animtion parameters
-        GOAL_POS = [4, 4]
-        OBS_POS = [2, 2.5]
-        OBS_R = 0.75
         FREQ = 50 #control frequency, same as data update frequency
         
         if animate:
             fig, ax = plt.subplots()
             # set the axes limits
-            ax.axis([0, GOAL_POS[0]+2.5, 0, GOAL_POS[1]+2.5])
+            ax.axis([-0.25, 5.25, -0.25, 5.25])
             # set equal aspect such that the circle is not shown as ellipse
             ax.set_aspect("equal")
             # create a set of points in the axes
