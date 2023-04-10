@@ -348,45 +348,17 @@ class TurtlebotCBFQPDeadlock(TurtlebotCBFQP):
         return self._u
     
 class TurtlebotCBFQPVision(TurtlebotCBFQPDeadlock):
-    def __init__(self, observer, barriers, trajectory, lidar):
+    def __init__(self, observer, barriers, trajectory):
         """
         Class for CBF QP Controller over vision.
         Args:
             observer (EgoTurtlebotObserver): state observer object for a single turtlebot within the system
-            barriers (List of TurtlebotBarrierDeadlock): List of TurtlebotBarrier objects corresponding to that turtlebot
+            barriers (List of TurtlebotBarrierVision): List of TurtlebotBarrierVision objects corresponding to that turtlebot
             traj (Trajectory): trajectory object
             lidar (EgoLidar): lidar object
         """
         #call the super class init
         super().__init__(observer, barriers, trajectory)
-
-        #store the lidar object
-        self.lidar = lidar
-
-    def eval_input(self, t):
-        """
-        Evaluate the u input to the system using deadlock resolution.
-        """
-        #NOTE: As a test, call the lidar update step here to recompute pointcloud
-        ptcloudDict = self.lidar.get_pointcloud(update = True)
-
-        # print(ptcloudDict['ptcloud'])
-
-        #first, evaluate the z input based on the CBF constraints
-        zOpt = self.eval_z_input(t)
-
-        #SET THE VALUE OF Z IN THE DYNAMICS
-        self.observer.dynamics.set_z(zOpt, self.observer.index)
-
-        #next, evaluate w input based on the CBF z input
-        wOpt = self.nominalController.eval_w_input(t, zOpt)
-        
-        #integrate the w1 term to get v
-        self.vDotInt += wOpt[0, 0]*self.dt
-
-        #return the [v, omega] input
-        self._u = np.array([[self.vDotInt, wOpt[1, 0]]]).T
-        return self._u
     
         
 
@@ -456,14 +428,11 @@ class ControllerManager(Controller):
                 #get the ith observer object
                 egoObsvI = self.observerManager.get_observer_i(i)
 
-                #get the ith barrier object
+                #get the ith barrier object - assumes that this is a vision-based barrier
                 barrierI = self.barrierManager.get_barrier_list_i(i)
 
-                #get the ith lidar object
-                lidarI = self.lidarManager.get_lidar_i(i)
-
                 #create a CBF QP controller
-                self.controllerDict[i] = TurtlebotCBFQPVision(egoObsvI, barrierI, trajI, lidarI)
+                self.controllerDict[i] = TurtlebotCBFQPVision(egoObsvI, barrierI, trajI)
 
             elif self.controlType == 'TurtlebotFBLin':
                 #extract the ith trajectory

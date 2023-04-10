@@ -135,10 +135,99 @@ class TurtlebotBarrierDeadlock(TurtlebotBarrier):
         #return the two derivatives and the barrier function
         self._vals = [h, hDot, hDDot]
         return self._vals
+    
+class TurtlebotBarrierVision(TurtlebotBarrierDeadlock):
+    def __init__(self, stateDimn, inputDimn, dynamics, observerEgo, lidarEgo, buffer):
+        """
+        Turtlebot barrier function for vision-based CBF-QP. This barrier function is relative degree 2
+        with respect to the linearized dynamics q'Dot = Aq' + Bz -> these are used to compute the derivative.
+        """
+        #store the input parameters
+        self.stateDimn = stateDimn
+        self.inputDimn = inputDimn
+        self.dynamics = dynamics
+        self.observerEgo = observerEgo
+        self.lidarEgo = lidarEgo #Lidar Ego is a lidar object from the ego observer
+        self._buffer = buffer
+
+        #define the radius of the turtlebot
+        self.rt = 0.15
+
+    def calc_rotation(self, qe):
+        """
+        Calculates the rotation matrix Rse associated with a particular state vector
+        Inputs:
+            qe ((3x1) NumPy Array): state vector of the ego turtlebot
+        Returns:
+            Rse ((3x3) NumPy Array): rotation matrix from the ego frame to spatial frame
+        """
+        phi = qe[2, 0]
+        Rse = np.array([[np.cos(phi), -np.sin(phi), 0], [np.sin(phi), np.cos(phi), 0], [0, 0, 1]])
+        return Rse
+
+    def ptcloud_to_spatial(self, ptcloudDict):
+        """
+        Transforms the pointcloud from the ego turtlebot frame in which it was taken
+        to the spatial frame. 
+        Inputs:
+            ptcloudDict (Dictionary): {'ptcloud', 'stateVec'} dictionary
+        Returns:
+            ptcloudSpatial ((3xN) NumPy Array): pointcloud transformed to the world frame
+        """
+        #calculate rotation and position
+        Rse = self.calc_rotation(ptcloudDict['stateVec'])
+        qe = ptcloudDict['stateVec']
+        pse = np.array([[qe[0, 0], qe[1, 0], 0]]).T
+
+        #transform ptcloud using pse, Rse
+        return Rse @ ptcloudDict['ptcloud'] + pse
+
+    def eval(self, u, t):
+        """
+        Evaluate the CBF and its derivatives. 
+        Inputs:
+            u ((2x1) NumPy Array): the z input to the linearized system.
+        Returns:
+            [h, hDot, hDDot] (Python List of floats): barrier function and its derivatives
+        """
+        #get the position and velocity of the ego and the obstacle objects
+        qe = self.observerEgo.get_state()
+
+        #calculate qeDot from the observer (Not from v input!)
+        qeDot = self.observerEgo.get_vel()
+
+        #Call the lidar update step to recompute pointcloud
+        ptcloudDict = self.lidarEgo.get_pointcloud(update = True)
+
+        #get the pointcloud in the spatial frame
+        ptcloudSpatial = self.ptcloud_to_spatial(ptcloudDict)
+
+        #get the closest point in the pointcloud as qo for barrier computation
+        diffmatrix = ptcloudSpatial - qe
+        normMatrix = np.linalg.norm(diffmatrix, axis = 0) #get the norms of the columns
+        colMin = np.argmin(normMatrix) #find the closest column
+        qo = ptcloudSpatial[:, colMin].reshape((3, 1)) #define the obstacle point from the closest column
+
+        #assume the obstacle velocities and accelerations are negligible
+        qoDot = np.zeros((3, 1))
+        zo = np.zeros((3, 1))
+
+        #evaluate the CBF
+        h = (qe[0, 0] - qo[0, 0])**2 + (qe[1, 0] - qo[1, 0])**2 - (2*self.rt)**2
+
+        #evaluate the derivative of the CBF
+        hDot = 2*(qe[0, 0] - qo[0, 0])*((qeDot[0, 0] - qoDot[0, 0])) + 2*(qe[1, 0] - qo[1, 0])*((qeDot[1, 0] - qoDot[1, 0]))
+
+        #using the linearized dynamics, return the second derivative of the CBF
+        hDDot = 2*(qeDot[0, 0] - qoDot[0, 0])**2 + 2*(qe[0, 0] - qo[0, 0])*((u[0] - zo[0, 0])) + 2*(qeDot[1, 0] - qoDot[1, 0])**2 + 2*(qe[1, 0] - qo[1, 0])*((u[1] - zo[1, 0]))
+        
+        #return the two derivatives and the barrier function
+        self._vals = [h, hDot, hDDot]
+        return self._vals
 
 
 class BarrierManager:
-    def __init__(self, N, stateDimn, inputDimn, dynamics, observer, buffer, dLock = False):
+    def __init__(self, N, stateDimn, inputDimn, dynamics, observer, buffer, dLock = False, lidarManager = None):
         """
         Class to organize barrier functionf or a system of N turtlebots.
         Initializes N-1 TurtlebotBarrier objects for each of the N turtlebots in the system.
@@ -149,6 +238,7 @@ class BarrierManager:
             dynamics (Dynamics): dynamics object for the whole turtlebot system
             observer (ObserverManager): observer object for the whole turtlebot system
             dLock (boolean): apply deadlock version of CBF to the system
+            lidarManager (LidarManager): include if wish to use the vision-based version of the CBF
         """
         #store the number of turtlebots in the system
         self.N = N
@@ -159,8 +249,9 @@ class BarrierManager:
         #store the observer manager
         self.observerManager = observer
 
-        #store the deadlock option
+        #store the deadlock and vision options
         self.dLock = dLock
+        self.lidarManager = lidarManager
 
         #create a set of N - 1 Barrier functions for that turtlebot
         for i in range(self.N):
@@ -176,17 +267,26 @@ class BarrierManager:
             #get the observer corresponding to the ego turtlebot
             observerEgo = self.observerManager.get_observer_i(i)
 
-            #loop over the remaining indices and create a barrier function for each obstacle turtlebot
-            for j in indexList:
-                #ego index is i, obstacle index is j
-                observerObstacle = self.observerManager.get_observer_i(j) #get the obstacle observer
+            if self.lidarManager is not None:
+                #get the lidar associated with turtlebot i (the EGO turtlebot)
+                lidarEgo = self.lidarManager.get_lidar_i(i)
 
-                #append a barrier function with the obstacle and ego observers
-                if not self.dLock:
-                    egoBarrierList.append(TurtlebotBarrier(stateDimn, inputDimn, dynamics, observerEgo, observerObstacle, buffer))
-                else:
-                    #apply the deadlock version of the barrier function
-                    egoBarrierList.append(TurtlebotBarrierDeadlock(stateDimn, inputDimn, dynamics, observerEgo, observerObstacle, buffer))
+                #use the vision-based barrier function - only need one per turtlebot
+                egoBarrierList.append(TurtlebotBarrierVision(stateDimn, inputDimn, dynamics, observerEgo, lidarEgo, buffer))
+            else:
+                #use the non vision-based barrier functions - create one for each obstacle
+                #loop over the remaining indices and create a barrier function for each obstacle turtlebot
+                for j in indexList:
+                    #ego index is i, obstacle index is j
+                    observerObstacle = self.observerManager.get_observer_i(j) #get the obstacle observer
+
+                    #append a barrier function with the obstacle and ego observers
+                    if not self.dLock and not self.vision:
+                        #use the basic relative degree 1 barrier function
+                        egoBarrierList.append(TurtlebotBarrier(stateDimn, inputDimn, dynamics, observerEgo, observerObstacle, buffer))                        
+                    else:
+                        #apply the deadlock version (r = 2) of the barrier function (not vision-based)
+                        egoBarrierList.append(TurtlebotBarrierDeadlock(stateDimn, inputDimn, dynamics, observerEgo, observerObstacle, buffer))
 
             #store the ego barrier list in the barrier function dictionary for the robots
             self.barrierDict[i] = egoBarrierList

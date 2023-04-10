@@ -27,15 +27,18 @@ qD = gen_goal_state(N)
 T = 10
 trajManager = TrajectoryManager(q0, qD, T, N)
 
-#define a barrier manager
-useDeadLock = True
-useVision = True
-barrierManager = BarrierManager(N, 3, 2, dynamics, observerManager, 0, dLock = useDeadLock)
-
 #define a lidar manager and lidar noise parameters
 m = 0
 s = 0
 lidarManager = LidarManager(observerManager, m, s)
+
+#define a barrier manager
+useDeadLock = True
+useVision = True
+if not useVision:
+    barrierManager = BarrierManager(N, 3, 2, dynamics, observerManager, 0, dLock = useDeadLock, lidarManager = None)
+else:
+    barrierManager = BarrierManager(N, 3, 2, dynamics, observerManager, 0, dLock = useDeadLock, lidarManager = lidarManager)
 
 #Create a controller manager
 if useDeadLock and not useVision:
