@@ -47,7 +47,6 @@ class EgoTurtlebotObserver(StateObserver):
         Returns:
             3x1 numpy array, observed state vector of the ith turtlebot in the system (zero indexed)
         """
-        # print('hi')
         return super().get_state()[3*self.index : 3*self.index + 3].reshape((3, 1))
     
     def get_vel(self):
@@ -86,7 +85,6 @@ class EgoTurtlebotObserver(StateObserver):
 
         #slice out the ith term
         return z[2*self.index : 2*self.index + 2].reshape((2, 1))
-
     
     
 class ObserverManager:
@@ -153,7 +151,7 @@ class EgoLidar:
 
         #store an attribute for the pointcloud
         self.numPts = 20 #number of points per bot for depth camera observation
-        self._ptcloud = 1000*np.ones((3, self.numPts)) #pointcloud attribute (initialize far away)
+        self._ptcloudData = {} #pointcloud attribute (initialize far away)
 
     def calc_orientation(self):
         """
@@ -164,7 +162,7 @@ class EgoLidar:
             Rse: rotation matrix from ego frame to world frame
         """
         qo = (self.observerManager.get_observer_i(self.index)).get_state()
-        phi = qo[0, 2]
+        phi = qo[2, 0]
         Rse = np.array([[np.cos(phi), -np.sin(phi), 0], [np.sin(phi), np.cos(phi), 0], [0, 0, 1]])
         return Rse
 
@@ -189,7 +187,7 @@ class EgoLidar:
         thetaArr = np.linspace(0, 2*np.pi, self.numPts).tolist()
 
         #define an empty pointcloud - should be 3 x numPts
-        ptcloud = np.zeros((3, len(obsIndexList) * self.num_pts))
+        ptcloud = np.zeros((3, len(obsIndexList) * self.numPts))
         
         #define a number of iterations
         j = 0
@@ -212,7 +210,7 @@ class EgoLidar:
             ptcloudIego = (np.linalg.inv(Rse)@(ptcloudI - pse))
 
             #store in the ptcloud
-            ptcloud[j * self.numPts : j*self.num_pts + self.num_pts] = ptcloudIego
+            ptcloud[:, j * self.numPts : j*self.numPts + self.numPts] = ptcloudIego
 
             #increment number of iterations
             j += 1
@@ -228,9 +226,39 @@ class EgoLidar:
         Args:
             update: whether or not to recalculate the pointcloud
         Returns:
-            Dict: dictionary of pointcloud points, rotation matrix, position, and timestamp at capture
+            Dict: dictionary of pointcloud points and state vector at time of capture
         """
         #first, calculate the pointcloud
         if update:
             self.calc_ptcloud()
         return self._ptcloudData
+    
+class LidarManager:
+    def __init__(self, observerManager, mean, sd):
+        """
+        Managerial class to manage the observers for a system of N turtlebots
+        Args:
+            observerManager (ObserverManager): ObserverManager object instance
+            mean (float, optional): Mean for gaussian noise. Defaults to None.
+            sd (float, optional): standard deviation for gaussian noise. Defaults to None.
+        """
+        #store the input parameters
+        self.observerManager = observerManager
+        self.mean = mean
+        self.sd = sd
+
+        #create an observer dictionary storing N observer instances
+        self.lidarDict = {}
+
+        #create N lidar objects - one for each turtlebot
+        for i in range(self.observerManager.dynamics.N):
+            #create an observer with index i
+            self.lidarDict[i] = EgoLidar(i, self.observerManager, mean, sd)
+
+    def get_lidar_i(self, i):
+        """
+        Function to retrieve the ith observer object for the turtlebot
+        Inputs:
+            i (integer): index of the turtlebot whose observer we'd like to retrieve
+        """
+        return self.lidarDict[i]

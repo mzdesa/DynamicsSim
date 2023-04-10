@@ -9,7 +9,7 @@ from obstacle import *
 from utils import *
 
 #system initial condition
-N = 50
+N = 5
 q0 = gen_init_cond(N)
 
 #create a dynamics object for the double integrator
@@ -29,14 +29,20 @@ trajManager = TrajectoryManager(q0, qD, T, N)
 
 #define a barrier manager
 useDeadLock = True
+useVision = True
 barrierManager = BarrierManager(N, 3, 2, dynamics, observerManager, 0, dLock = useDeadLock)
 
+#define a lidar manager and lidar noise parameters
+m = 0
+s = 0
+lidarManager = LidarManager(observerManager, m, s)
+
 #Create a controller manager
-if useDeadLock:
+if useDeadLock and not useVision:
     ctrlType = 'TurtlebotCBFQPDeadlock'
 else:
-    ctrlType = 'TurtlebotCBFQP'
-controller = ControllerManager(observerManager, barrierManager, trajManager, ctrlType)
+    ctrlType = 'TurtlebotCBFQPVision'
+controller = ControllerManager(observerManager, barrierManager, trajManager, lidarManager, ctrlType)
 
 #create a simulation environment
 env = Environment(dynamics, controller, observerManager, T = T)
