@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.spatial import cKDTree
 
 class StateObserver:
     def __init__(self, dynamics, mean = None, sd = None):
@@ -132,59 +131,95 @@ class ObserverManager:
 
         #vstack the individual observer states
         return np.vstack(xHatList)
-
     
-class DepthCam:
-    def __init__(self, circle, observer, mean = None, sd = None):
+
+class EgoLidar:
+    def __init__(self, index, observerManager, mean = None, sd = None):
         """
-        Init function for depth camera observer
+        Lidar for an ego turtlebot. Returns a pointcloud containing
+        other turtlebots in the environment.
 
         Args:
-            circle (Circle): Circle object instance
-            observer (DoubleIntObserver): Double integrator observer, or one of a similar format
-            stateDimn (int): length of state vector
-            inputDimn (int): length of input vector
-            mean (float, optional): Mean for gaussian noise. Defaults to None.
-            sd (float, optional): standard deviation for gaussian noise. Defaults to None.
+            index (int) : index of the ego turtlebot (zero-indexed from the first turtlebots)
+            observerManager (ObserverManager) : Manager object for state estimation
+            mean (float): mean for measurement noise
+            sd (float): standard deviation for measurement noise
         """
-        self.circle = circle
-        self.observer = observer
-        self.stateDimn = self.observer.stateDimn
-        self.inputDimn = self.observer.inputDimn
+        #store input parameters
+        self.index = index
+        self.observerManager = observerManager
         self.mean = mean
         self.sd = sd
-        
-        #stores the pointcloud dict in the vehicle frame (not spatial)
-        self._ptcloudData = {"ptcloud": None, "rotation": None, "position": None, "kd": None}
-        
+
+        #store an attribute for the pointcloud
+        self.numPts = 20 #number of points per bot for depth camera observation
+        self._ptcloud = 1000*np.ones((3, self.numPts)) #pointcloud attribute (initialize far away)
+
+    def calc_orientation(self):
+        """
+        Function to calculate the orientation of the turtlebot WRT the world frame.
+        Args:
+            None
+        Returns:
+            Rse: rotation matrix from ego frame to world frame
+        """
+        qo = (self.observerManager.get_observer_i(self.index)).get_state()
+        phi = qo[0, 2]
+        Rse = np.array([[np.cos(phi), -np.sin(phi), 0], [np.sin(phi), np.cos(phi), 0], [0, 0, 1]])
+        return Rse
+
     def calc_ptcloud(self):
         """
-        Calculate the pointcloud over a sample of points
+        Function to compute the pointcloud of the environment from the ego turtlebot frame.
+        Args:
+            None
+        Returns:
+            ptcloud (3 x N NumPy Array): pointcloud containing (x, y, z) coordinates of obstacles within ego frame.
         """
-        #define an array of angles
-        thetaArr = np.linspace(0, 2*np.pi)
-        #get the points in the world frame
-        obsPts = self.circle.get_pts(thetaArr)
+        #get the ego state vector and orientation
+        qEgo = (self.observerManager.get_observer_i(self.index)).get_state()
+        pse = np.array([[qEgo[0, 0], qEgo[1, 0], 0]]).T #ego XYZ position
+        Rse = self.calc_orientation() #ego rotation matrix to spatial frame
+
+        #get a list of observers for all obstacle turtlebots
+        obsIndexList = list(self.observerManager.observerDict.keys()) #get a list of all turtlebot indices
+        obsIndexList.remove(self.index) #remove the ego index
+
+        #define an array of angles to generate points over
+        thetaArr = np.linspace(0, 2*np.pi, self.numPts).tolist()
+
+        #define an empty pointcloud - should be 3 x numPts
+        ptcloud = np.zeros((3, len(obsIndexList) * self.num_pts))
         
-        #transform these points into rays in the vehicle frame.
-        Rsc = self.observer.get_orient() #get the rotation matrix
-        psc = self.observer.get_pos() #get the position
-        
-        #initialize and fill the pointcloud array
-        ptcloud = np.zeros((3, thetaArr.shape[0]))
-        for i in range(thetaArr.shape[0]):
-            #get the ith XYZ point in the pointcloud (in the spatial frame)
-            ps = obsPts[:, i].reshape((3, 1))
-            ptcloud[:, i] = (np.linalg.inv(Rsc)@(ps - psc)).reshape((3, ))
+        #define a number of iterations
+        j = 0
+
+        #iterate over all obstacle turtlebots
+        for i in obsIndexList:
+            #get the state vector and radius of the ith turtlebot
+            qo = (self.observerManager.get_observer_i(i)).get_state()
+            rt = self.observerManager.dynamics.rTurtlebot
+
+            #calculate the points on the circle - all z values are zero
+            xList = [rt*np.cos(theta) + qo[0, 0] for theta in thetaArr]
+            yList = [rt*np.sin(theta) + qo[1, 0] for theta in thetaArr]
+            zList = [0 for theta in thetaArr]
+
+            #put the points in a numpy array
+            ptcloudI = np.array([xList, yList, zList])
+
+            #transform the points into the ego frame
+            ptcloudIego = (np.linalg.inv(Rse)@(ptcloudI - pse))
+
+            #store in the ptcloud
+            ptcloud[j * self.numPts : j*self.num_pts + self.num_pts] = ptcloudIego
+
+            #increment number of iterations
+            j += 1
             
-        #generate the KD tree associated with the data
-        kdtree = cKDTree(ptcloud.T) #must store in transpose
-            
-        #update the pointcloud dict with this data
+        #store both the pointcloud and the ego state vector at the time the pointcloud is taken
         self._ptcloudData["ptcloud"] = ptcloud
-        self._ptcloudData["rotation"] = Rsc
-        self._ptcloudData["position"] = psc
-        self._ptcloudData["kd"] = kdtree
+        self._ptcloudData["stateVec"] = qEgo
         return self._ptcloudData
         
     def get_pointcloud(self, update = True):
@@ -199,27 +234,3 @@ class DepthCam:
         if update:
             self.calc_ptcloud()
         return self._ptcloudData
-    
-    def get_knn(self, K):
-        """
-        Gets the K Nearest neighbors in the pointcloud to the point and their indices.
-        Args:
-            K (int): number of points to search for
-        Returns:
-            (3xK numpy array): Matrix of closest points in the vehicle frame
-        """
-        #check what's closest to the zero vector - this will give the closest points in the vehicle frame!
-        dist, ind = self.get_pointcloud(update = True)["kd"].query(np.zeros((1, 3)), K)
-        
-        #extract list
-        if ind.shape != (1, ):
-            ind = ind[0]
-        
-        #convert indices to a matrix of the points
-        closest_K = np.zeros((3, K))
-        for i in range(K):
-            index = ind[i] #extract the ith index from the optimal index list
-            closest_K[:, i] = (self._ptcloudData["ptcloud"])[:, index]
-        
-        #return the matrix
-        return closest_K

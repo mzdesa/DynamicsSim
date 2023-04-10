@@ -9,7 +9,7 @@ from obstacle import *
 from utils import *
 
 #system initial condition
-N = 5
+N = 50
 q0 = gen_init_cond(N)
 
 #create a dynamics object for the double integrator
