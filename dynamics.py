@@ -190,6 +190,11 @@ class TurtlebotSysDyn(Dynamics):
                 return points,
             
             anim = animation.FuncAnimation(fig, animate, frames=num_frames, interval=1/FREQ*1000, blit=True)
+
+            # save animation option
+            # writer = animation.PillowWriter(fps=30) 
+            # anim.save('animation.gif', writer = writer)
+
             plt.xlabel("X Position (m)")
             plt.ylabel("Y Position (m)")
             plt.title("Positions of Turtlebots in Space")
